@@ -1,0 +1,13 @@
+{
+  "name": "sendl",
+  "version": "1.0.0",
+  "description": "SendL - Central de envio de boletos Edel White",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.3",
+    "cors": "^2.8.5"
+  }
+}
