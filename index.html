@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SendL | Edel White</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body class="locked">
+  <section class="login-screen" id="loginScreen">
+    <div class="login-bg"></div>
+
+    <article class="login-card">
+      <div class="login-brand">
+        <div class="brand-mark big">SL</div>
+        <div>
+          <h1>SendL</h1>
+          <p>Edel White • Central de boletos</p>
+        </div>
+      </div>
+
+      <div class="login-copy">
+        <h2>Acesse sua central</h2>
+        <p>Entre para importar remessas, validar clientes e controlar envios por WhatsApp e e-mail.</p>
+      </div>
+
+      <form id="loginForm" class="form">
+        <label>
+          E-mail
+          <input required type="email" name="email" autocomplete="email" value="financeiro@edel-white.com" />
+        </label>
+
+        <label>
+          Senha
+          <input required type="password" name="password" autocomplete="current-password" placeholder="Digite sua senha" />
+        </label>
+
+        <button class="btn primary full" type="submit">Entrar no SendL</button>
+      </form>
+
+      <div class="login-hint">
+        <strong>Acesso inicial do MVP:</strong>
+        <span>financeiro@edel-white.com / edelwhite123</span>
+      </div>
+    </article>
+  </section>
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">SL</div>
+      <div>
+        <h1>SendL</h1>
+        <span>Edel White</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">Dashboard</button>
+      <button class="nav-item" data-view="remessa">Remessa diária</button>
+      <button class="nav-item" data-view="registros">Registros</button>
+      <button class="nav-item" data-view="clientes">Base clientes</button>
+      <button class="nav-item" data-view="configuracoes">Configurações</button>
+    </nav>
+
+    <div class="sidebar-card">
+      <strong>MVP v2</strong>
+      <p>Login, Outlook configurado, WhatsApp oficial e importação da remessa Santander/CNAB.</p>
+    </div>
+  </aside>
+
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Sistema financeiro</p>
+        <h2 id="pageTitle">Dashboard</h2>
+      </div>
+
+      <div class="top-actions">
+        <div class="channel-pill">
+          <span>WhatsApp</span>
+          <strong id="topWhatsapp">+55 11 96333-6098</strong>
+          <small id="topWhatsappStatus">Não autenticado</small>
+        </div>
+        <div class="channel-pill">
+          <span>Outlook</span>
+          <strong id="topOutlook">financeiro@edel-white.com</strong>
+          <small id="topEmailStatus">Não autenticado</small>
+        </div>
+        <button class="btn ghost" id="btnSeed">Carregar exemplo</button>
+        <button class="btn danger" id="btnLogout">Sair</button>
+      </div>
+    </header>
+
+    <section class="view active" id="dashboard">
+      <div class="grid stats-grid">
+        <article class="stat-card">
+          <span>Registros</span>
+          <strong id="statTotal">0</strong>
+          <small>Notas/remessas importadas</small>
+        </article>
+        <article class="stat-card">
+          <span>Clientes</span>
+          <strong id="statClients">0</strong>
+          <small>Base cadastrada</small>
+        </article>
+        <article class="stat-card">
+          <span>Prontos</span>
+          <strong id="statReady">0</strong>
+          <small>Aguardando envio</small>
+        </article>
+        <article class="stat-card alert">
+          <span>Pendências</span>
+          <strong id="statPending">0</strong>
+          <small>Sem boleto, contato ou revisão</small>
+        </article>
+      </div>
+
+      <div class="grid single-col">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Últimos eventos</h3>
+              <p>Histórico das ações realizadas no painel.</p>
+            </div>
+          </div>
+          <div id="logList" class="log-list empty-state">Nenhum evento registrado ainda.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" id="remessa">
+      <div class="grid two-cols">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Importar remessa diária</h3>
+              <p>Use o arquivo TXT gerado diariamente, no padrão Santander/CNAB 400.</p>
+            </div>
+          </div>
+
+          <div class="upload-box">
+            <input type="file" id="remessaFile" accept=".txt,.rem,.ret" />
+            <p>O sistema vai ler somente registros de cobrança iniciados por <strong>1</strong>.</p>
+            <button class="btn primary" id="btnImportRemessa">Importar remessa</button>
+          </div>
+
+          <div class="info-list">
+            <div>
+              <b>Dados extraídos</b>
+              <span>Cliente, documento, nota/parcela, vencimento, valor e endereço.</span>
+            </div>
+            <div>
+              <b>Cruzamento automático</b>
+              <span>O documento da remessa é comparado com a base de clientes.</span>
+            </div>
+            <div>
+              <b>Proteção contra duplicidade</b>
+              <span>Documento + nota + valor + vencimento não podem repetir.</span>
+            </div>
+          </div>
+
+          <div id="remessaFeedback" class="feedback"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Cadastro manual de cobrança</h3>
+              <p>Use apenas para casos fora da remessa.</p>
+            </div>
+          </div>
+
+          <form id="manualForm" class="form">
+            <label>
+              Nome do cliente
+              <input required name="cliente" placeholder="Ex.: Clínica Exemplo" />
+            </label>
+
+            <label>
+              CNPJ/CPF
+              <input required name="documento" placeholder="00.000.000/0001-00" />
+            </label>
+
+            <div class="form-row">
+              <label>
+                Nº da nota/parcela
+                <input required name="nota" placeholder="5010042073-01" />
+              </label>
+              <label>
+                Valor
+                <input required name="valor" placeholder="737,15" />
+              </label>
+            </div>
+
+            <div class="form-row">
+              <label>
+                Vencimento
+                <input required type="date" name="vencimento" />
+              </label>
+              <label>
+                PDF boleto
+                <input name="boleto" placeholder="boleto_5010042073-01.pdf" />
+              </label>
+            </div>
+
+            <label>
+              E-mail financeiro
+              <input type="email" name="email" placeholder="financeiro@cliente.com.br" />
+            </label>
+
+            <label>
+              WhatsApp
+              <input name="whatsapp" placeholder="5511999999999" />
+            </label>
+
+            <button class="btn secondary" type="submit">Salvar cobrança</button>
+          </form>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" id="registros">
+      <article class="panel">
+        <div class="panel-header wrap">
+          <div>
+            <h3>Registros importados</h3>
+            <p>Valide boleto, contatos e duplicidade antes de simular o envio.</p>
+          </div>
+
+          <div class="filters">
+            <input id="searchInput" placeholder="Buscar cliente, nota, documento..." />
+            <select id="statusFilter">
+              <option value="">Todos os status</option>
+              <option value="aguardando_boleto">Aguardando boleto</option>
+              <option value="cliente_sem_contato">Cliente sem contato</option>
+              <option value="pronto_envio">Pronto para envio</option>
+              <option value="pendente_revisao">Pendente revisão</option>
+              <option value="enviado">Enviado</option>
+              <option value="erro">Erro</option>
+            </select>
+            <button class="btn ghost" id="btnExportCsv">Exportar CSV</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Documento</th>
+                <th>Nota</th>
+                <th>Valor</th>
+                <th>Vencimento</th>
+                <th>Contato</th>
+                <th>Boleto</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="recordsTable"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="view" id="clientes">
+      <div class="grid two-cols">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Importar base de clientes</h3>
+              <p>Suba a planilha de clientes em CSV. A versão em nuvem aceitará XLSX também.</p>
+            </div>
+          </div>
+
+          <div class="upload-box">
+            <input type="file" id="clientsFile" accept=".csv,.txt" />
+            <p>Colunas aceitas: cliente, documento, email, whatsapp, contato, observacao.</p>
+            <button class="btn primary" id="btnImportClients">Importar clientes</button>
+          </div>
+
+          <div class="code-sample">
+            <strong>Modelo de base de clientes:</strong>
+            <pre>cliente;documento;email;whatsapp;contato;observacao
+Smile e Lovers;41.648.484/0001-67;financeiro@cliente.com.br;5511999999999;Financeiro;Cliente ativo</pre>
+          </div>
+
+          <div id="clientsFeedback" class="feedback"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Cadastrar cliente manual</h3>
+              <p>Inclua contatos que faltarem durante a validação.</p>
+            </div>
+          </div>
+
+          <form id="clientForm" class="form">
+            <label>
+              Cliente
+              <input required name="cliente" placeholder="Nome/Razão social" />
+            </label>
+
+            <label>
+              CNPJ/CPF
+              <input required name="documento" placeholder="00.000.000/0001-00" />
+            </label>
+
+            <label>
+              E-mail financeiro
+              <input required type="email" name="email" placeholder="financeiro@cliente.com.br" />
+            </label>
+
+            <label>
+              WhatsApp
+              <input required name="whatsapp" placeholder="5511999999999" />
+            </label>
+
+            <label>
+              Contato
+              <input name="contato" placeholder="Nome do responsável financeiro" />
+            </label>
+
+            <button class="btn secondary" type="submit">Salvar cliente</button>
+          </form>
+        </article>
+      </div>
+
+      <article class="panel mt">
+        <div class="panel-header wrap">
+          <div>
+            <h3>Clientes cadastrados</h3>
+            <p>Base usada para preencher os contatos das remessas.</p>
+          </div>
+          <button class="btn ghost" id="btnExportClients">Exportar clientes</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Documento</th>
+                <th>E-mail</th>
+                <th>WhatsApp</th>
+                <th>Contato</th>
+                <th>Notas vinculadas</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="clientsTable"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="view" id="configuracoes">
+      <div class="grid two-cols">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Canais oficiais</h3>
+              <p>Edite o número de WhatsApp e o e-mail Outlook usados nos envios.</p>
+            </div>
+          </div>
+
+          <form id="channelsForm" class="form">
+            <label>
+              Número do WhatsApp
+              <input required name="whatsappDisplay" placeholder="+55 11 96333-6098" />
+            </label>
+
+            <label>
+              E-mail Outlook para envio
+              <input required type="email" name="outlookEmail" placeholder="financeiro@edel-white.com" />
+            </label>
+
+            <div class="verify-grid">
+              <div class="verify-card">
+                <div class="verify-head">
+                  <div>
+                    <h4>Autenticação WhatsApp</h4>
+                    <p>Confirme que o número está correto antes de liberar envios.</p>
+                  </div>
+                  <span class="verify-status pending" id="whatsappAuthStatus">Pendente</span>
+                </div>
+
+                <div class="code-row">
+                  <input name="whatsappCode" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" />
+                  <button class="btn ghost" type="button" id="btnSendWhatsAppCode">Gerar código</button>
+                  <button class="btn secondary" type="button" id="btnConfirmWhatsApp">Confirmar</button>
+                </div>
+              </div>
+
+              <div class="verify-card">
+                <div class="verify-head">
+                  <div>
+                    <h4>Autenticação Outlook</h4>
+                    <p>Confirme o e-mail financeiro usado para envio dos boletos.</p>
+                  </div>
+                  <span class="verify-status pending" id="emailAuthStatus">Pendente</span>
+                </div>
+
+                <div class="code-row">
+                  <input name="emailCode" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" />
+                  <button class="btn ghost" type="button" id="btnSendEmailCode">Gerar código</button>
+                  <button class="btn secondary" type="button" id="btnConfirmEmail">Confirmar</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="channelsFeedback" class="feedback"></div>
+
+            <button class="btn primary" type="submit">Salvar alterações nos canais</button>
+          </form>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Modelo de mensagem</h3>
+              <p>Prévia do texto usado na simulação de envio.</p>
+            </div>
+          </div>
+
+          <form id="settingsForm" class="form">
+            <label>
+              Assunto do e-mail
+              <input name="emailSubject" />
+            </label>
+            <label>
+              Mensagem padrão
+              <textarea name="messageTemplate" rows="8"></textarea>
+            </label>
+            <button class="btn primary" type="submit">Salvar mensagem</button>
+          </form>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <dialog id="recordModal">
+    <form method="dialog" class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Detalhes</h3>
+        <button class="icon-btn" value="cancel">×</button>
+      </div>
+      <div id="modalBody"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" value="cancel">Fechar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
