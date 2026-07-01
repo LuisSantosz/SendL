@@ -1,109 +1,76 @@
-# SendL MVP v2
+# SendL - Outlook oficial no Railway
 
-SendL é a central de controle de boletos da Edel White.
+Esta versão adiciona o backend oficial para conectar o Outlook via Microsoft Entra ID e Microsoft Graph.
 
-## Novidades da v4
-
-- Tela de login com animação de acesso liberado.
-- A tela de login desaparece após o acesso.
-- Canais oficiais editáveis e autenticáveis:
-  - WhatsApp inicial: +55 11 96333-6098
-  - Outlook inicial: financeiro@edel-white.com
-- Geração de código de autenticação para WhatsApp.
-- Geração de código de autenticação para Outlook.
-- Bloqueio de envio enquanto WhatsApp e Outlook não estiverem autenticados.
-- Importação da remessa diária TXT Santander/CNAB 400.
-- Importação da base de clientes em CSV.
-- Cruzamento automático por CNPJ/CPF.
-- Status novo: "Cliente sem contato".
-- Vinculação manual de boleto PDF.
-- Simulação de envio usando os canais oficiais.
-- Modelo inicial de banco PostgreSQL atualizado.
-
-## Acesso inicial do MVP
-
-E-mail:
+## Rotas criadas
 
 ```txt
-financeiro@edel-white.com
+GET  /api/auth/outlook/login
+GET  /api/auth/outlook/callback
+GET  /api/auth/outlook/status
+POST /api/auth/outlook/disconnect
+POST /api/outlook/send-email
+POST /api/outlook/send-test
+GET  /api/webhooks/whatsapp
+POST /api/webhooks/whatsapp
+GET  /health
 ```
 
-Senha:
+## Variáveis que precisam estar no Railway
+
+Coloque no serviço SendL > Variables:
+
+```env
+MICROSOFT_TENANT_ID=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_REDIRECT_URI=https://sendl-production.up.railway.app/api/auth/outlook/callback
+OUTLOOK_EMAIL=financeiro@edelwhite.onmicrosoft.com
+WHATSAPP_VERIFY_TOKEN=SendL_EdelWhite_2026
+NODE_ENV=production
+```
+
+Use `financeiro@edelwhite.onmicrosoft.com` enquanto o domínio `edel-white.com` não estiver validado no Microsoft 365.
+
+## Microsoft Entra ID
+
+No aplicativo SendL em Registros de aplicativo, configure:
 
 ```txt
-edelwhite123
+Redirect URI:
+https://sendl-production.up.railway.app/api/auth/outlook/callback
 ```
 
-Importante: este login é apenas para teste local. Na versão em nuvem, a senha precisa ser criptografada e salva no backend.
+Permissões delegadas:
+
+```txt
+User.Read
+Mail.Send
+Mail.Read
+offline_access
+```
+
+Depois clique em "Conceder consentimento de administrador".
 
 ## Como testar
 
-1. Extraia o ZIP.
-2. Abra `index.html` no navegador.
-3. Faça login com o acesso inicial.
-4. Vá em `Base clientes` e importe `modelos/modelo-base-clientes.csv`.
-5. Vá em `Remessa diária` e importe seu arquivo TXT de remessa.
-6. Vá em `Registros`.
-7. Use `Boleto` para simular a localização do PDF.
-8. Clique em `Validar`.
-9. Clique em `Enviar`.
+1. Suba este código no GitHub.
+2. O Railway fará o deploy.
+3. Abra:
 
-## Formato da base de clientes
-
-Use CSV separado por ponto e vírgula:
-
-```csv
-cliente;documento;email;whatsapp;contato;observacao
-Smile e Lovers;41.648.484/0001-67;financeiro@cliente.com.br;5511999999999;Financeiro;Cliente ativo
+```txt
+https://sendl-production.up.railway.app/health
 ```
 
-## Sobre o arquivo diário TXT
+4. Acesse o SendL.
+5. Vá em Configurações.
+6. Clique em "Conectar Outlook".
+7. Faça login na tela oficial da Microsoft.
+8. O sistema volta para o SendL.
+9. Envie um e-mail teste.
 
-O importador lê arquivos de remessa em linhas fixas de 400 caracteres.
+## Observação importante
 
-Ele processa os registros que começam com `1` e extrai:
+Nesta versão, o token do Outlook é salvo em arquivo dentro da pasta `data/outlook-token.json`.
 
-- cliente;
-- CNPJ/CPF;
-- nota/parcela;
-- vencimento;
-- valor;
-- endereço/cidade/UF, quando disponível.
-
-## Próxima etapa
-
-Transformar este MVP local em um sistema real em nuvem:
-
-- Backend com Node.js/NestJS ou Python/FastAPI;
-- PostgreSQL;
-- login com usuário e senha criptografada;
-- armazenamento de PDFs em nuvem;
-- Microsoft Graph para Outlook;
-- WhatsApp Cloud API;
-- fila de envio;
-- logs de auditoria.
-
-
-## Ajustes da v3
-
-- Removido o bloco "Fluxo da operação SendL" do dashboard.
-- Removido o bloco "Próxima etapa técnica" da tela de configurações.
-- Número de WhatsApp e e-mail Outlook agora podem ser editados na tela Configurações.
-
-
-## Autenticação dos canais
-
-Na tela `Configurações`, o usuário pode editar:
-
-- número do WhatsApp;
-- e-mail Outlook.
-
-Depois de editar, é necessário gerar um código e confirmar.
-
-Nesta versão local, o código aparece na tela como simulação.
-Na versão em nuvem, o código deverá ser enviado de verdade:
-
-- por WhatsApp Cloud API para o número informado;
-- por Microsoft Graph/Outlook para o e-mail informado.
-
-O envio de boletos fica bloqueado até os dois canais estarem autenticados.
+Isso funciona para teste, mas em produção o ideal é salvar os tokens em banco de dados seguro, como PostgreSQL, porque arquivos podem ser perdidos em redeploys ou troca de instância.
