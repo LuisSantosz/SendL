@@ -7,8 +7,11 @@ const {chromium}=require("playwright");
   delete process.env.RAILWAY_ENVIRONMENT;
   let browser,server,page;
   try {
-    const app=require("../server");await new Promise(resolve=>server=app.listen(0,"127.0.0.1",resolve));
+    server=require("node:http").createServer();
+    await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
     const base="http://127.0.0.1:"+server.address().port;
+    process.env.APP_ORIGIN=base;
+    server.on("request",require("../server"));
     browser=await chromium.launch({headless:true});
     const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
     page=await context.newPage();page.setDefaultTimeout(15000);
