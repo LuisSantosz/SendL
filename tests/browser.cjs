@@ -122,36 +122,52 @@ const XLSX=require("xlsx");
     assert.equal(sent.length,1);assert.equal(sent[0].attachments.length,3);
     assert.equal(sent[0].to,"cliente@example.com");
     console.log("PASS conferência e envio simulado: três PDFs em um e-mail");
-    // A note-only flow must work without any imported title.
-    await page.locator('[data-view="documentos"]').click();
-    await page.locator("#fileClient").selectOption("12345678000199");
-    await page.locator("#fileKind").selectOption("nota");
-    await page.locator("#gmailSearchForm button").click();
-    await page.locator("[data-gmail-message]").waitFor();
-    await page.locator("[data-gmail-message]").click();
-    await page.waitForFunction(()=>document.querySelectorAll("#filesTable [data-preview]").length===4);
+    // Real fixed-width CNAB, stored client CPF without the three bank padding zeroes.
+    await page.locator('[data-view="clientes"]').click();
+    await page.locator("#clientsFile").setInputFiles({name:"cpf.csv",mimeType:"text/csv",buffer:Buffer.from("cliente;documento;email;estado\nAna Teste;93960697015;ana@example.com;RS\n")});
+    await page.locator("#clientsForm button").click();
+    await page.waitForFunction(()=>document.getElementById("clientsTable").textContent.includes("ana@example.com"));
+    const line=Array(400).fill(" ");line[0]="1";
+    const write=(offset,text)=>[...text].forEach((char,i)=>line[offset+i]=char);
+    write(40,"5010018735-013009260000000021480");write(220,"00093960697015");write(234,"Ana Teste");
     await page.locator('[data-view="remessa"]').click();
-    await page.locator("#recordsFile").setInputFiles({name:"auto.csv",mimeType:"text/csv",buffer:Buffer.from("cliente;documento;nota;valor;vencimento\nLoja Teste;12345678000199;42218;120;30/09/2026\n")});
+    await page.locator("#recordsFile").setInputFiles({name:"remessa.txt",mimeType:"text/plain",buffer:Buffer.from(line.join(""))});
     await page.locator("#recordsForm button").click();
     await page.waitForFunction(()=>document.getElementById("recordsFeedback").textContent.includes("1 adicionado(s)"));
-    await page.route("**/api/gmail/documents?*",route=>route.fulfill({json:{messages:[{id:"auto-test",subject:"NF",files:[{name:"NFe_42218.pdf",partId:"1"}]}],nextPageToken:null}}));
-    await page.route("**/api/gmail/documents/auto-test/attachment?*",route=>route.fulfill({json:{name:"NFe_42218.pdf",text:"NOTA FISCAL 42218",contentBytes:Buffer.from("%PDF-1.4\nauto 42218\n%%EOF").toString("base64")}}));
+    await page.locator('[data-view="fila"]').click();
+    assert.ok((await page.locator(".queue-card").textContent()).includes("ana@example.com"));
+    let secondPage=0;
+    await page.route("**/api/gmail/documents?*",route=>{
+      const params=new URL(route.request().url()).searchParams,q=params.get("q");
+      assert.ok(q.includes('"5010018735-01"')||q.includes('"00093960697015"')||q.includes('"939.606.970-15"'));
+      const next=params.get("pageToken");if(next)secondPage++;
+      return route.fulfill({json:{messages:[{id:next?"cnab-note":"cnab-bol",subject:"Boleto(s) Bancário Referente à NFe 000018735",files:[{name:next?"NFe_18735.pdf":"BOL_000018735.pdf",partId:"1"}]}],nextPageToken:next?null:"second"}});
+    });
+    await page.route("**/api/gmail/documents/cnab-*/attachment?*",route=>{
+      const note=route.request().url().includes("cnab-note");
+      return route.fulfill({json:{name:note?"NFe_18735.pdf":"BOL_000018735.pdf",
+        text:note?"NOTA FISCAL 18735\n5010018735-01\nDestinatario Ana 939.606.970-15":"Pagador Ana 939.606.970-15\nSacador/Avalista 12.345.678/0001-99\nVencimento 30/09/2026\nValor 214,80",
+        contentBytes:Buffer.from("%PDF-1.4\nCNAB "+(note?"nota":"boleto")+"\n%%EOF").toString("base64")}});
+    });
     await page.locator('[data-view="documentos"]').click();
     await page.locator("#fileClient").selectOption("01234567000199");
     await page.locator("#gmailSearchForm button").click();
-    await page.waitForFunction(()=>document.getElementById("gmailResults").textContent.includes("vinculado automaticamente a Loja Teste"));
-    assert.equal(await page.locator("[data-gmail-message]").count(),0);
+    await page.waitForFunction(()=>document.getElementById("gmailResults").textContent.includes("Busca da remessa concluída"));
+    assert.ok((await page.locator("#gmailResults").textContent()).includes("2 vinculado(s)"));
+    assert.equal(await page.locator("[data-gmail-message]").count(),0);assert.ok(secondPage>0);
+    await page.reload();await page.locator("body:not(.locked)").waitFor();
+    await page.locator('[data-view="documentos"]').click();
     await page.locator("#gmailSearchForm button").click();
-    await page.waitForFunction(()=>document.getElementById("gmailResults").textContent.includes("já coletado"));
-    console.log("PASS associação automática usa remessa, ignora seleção manual e não duplica");
+    await page.waitForFunction(()=>document.getElementById("gmailResults").textContent.includes("Busca da remessa concluída"));
+    assert.ok((await page.locator("#gmailResults").textContent()).includes("2 já coletado(s)"));
     await page.locator('[data-view="fila"]').click();
     await page.locator("[data-send]").click();
+    assert.equal(await page.locator("#sendTo").inputValue(),"ana@example.com");
     assert.equal(await page.locator("#sendFiles .attachment").count(),2);
-    assert.ok((await page.locator("#sendSubject").inputValue()).includes("Nota Fiscal"));
     await page.locator("#sendForm > button").click();
     await page.waitForFunction(()=>document.querySelectorAll(".queue-card").length===0);
-    assert.equal(sent.length,2);
-    console.log("PASS coleta Gmail simulada, vinculação e envio de nota sem boleto");
+    assert.equal(sent.length,2);assert.equal(sent[1].to,"ana@example.com");
+    console.log("PASS CPF CNAB/cadastro, busca direcionada, paginação automática, sacador, vinculação, persistência e envio simulado");
     assert.deepEqual(errors,[]);
     console.log("PASS navegador sem erros JavaScript");
   } catch(error) {

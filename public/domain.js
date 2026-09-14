@@ -6,6 +6,20 @@
   "use strict";
   const clean = value => String(value ?? "").trim();
   const documentId = value => clean(value).replace(/\D/g, "");
+  // CNAB reserves 14 digits for CPF/CNPJ; spreadsheets can omit leading zeroes.
+  // Keep source values intact, normalizing only keys used to compare identities.
+  const documentKey = value => {
+    const id=documentId(value);
+    return id&&id.length<=14?id.padStart(14,"0"):id;
+  };
+  const sameDocument = (a,b) => Boolean(documentId(a)&&documentId(b)&&documentKey(a)===documentKey(b));
+  function clientFor(clients,doc) {
+    const matches=clients.filter(c=>sameDocument(c.documento,doc));
+    if(!matches.length)return undefined;
+    const emails=[...new Set(matches.map(c=>clean(c.email).toLowerCase()).filter(Boolean))];
+    const first=matches.find(c=>validEmail(c.email))||matches[0];
+    return {...first,email:emails.length===1?emails[0]:"",emailConflict:emails.length>1};
+  }
   const validEmail = value => /^[^\s@<>,;:"\\]+@[^\s@<>,;:"\\]+\.[^\s@<>,;:"\\]+$/.test(clean(value)) && clean(value).length <= 254;
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
   const header = value => clean(value).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w]+/g, "_").replace(/^_+|_+$/g, "");
@@ -50,7 +64,7 @@
     return /^\d+(\.\d{1,2})?$/.test(s) ? Math.round(Number(s) * 100) / 100 : NaN;
   }
   function recordKey(record) {
-    return [documentId(record.documento), clean(record.nota), Number(record.valor).toFixed(2), record.vencimento].join("|");
+    return [documentKey(record.documento), clean(record.nota), Number(record.valor).toFixed(2), record.vencimento].join("|");
   }
   function importRecords(content) {
     const lines = String(content).replace(/^\uFEFF/, "").split(/\r?\n/).filter(line => line.trim());
@@ -98,17 +112,17 @@
     return match ? String(Number(match[1])) : "";
   }
   function groups(records, clients, files) {
-    const map = new Map(), directory = new Map(clients.map(c => [documentId(c.documento), c]));
-    function group(doc, name) {
-      doc = documentId(doc);
-      if (!map.has(doc)) map.set(doc, { documento: doc, cliente: directory.get(doc)?.cliente || name || doc,
-        email: directory.get(doc)?.email || "", records: [], files: [] });
-      return map.get(doc);
+    const map=new Map();
+    function group(doc,name) {
+      const key=documentKey(doc),client=clientFor(clients,doc);
+      if(!map.has(key))map.set(key,{documento:documentId(doc),cliente:client?.cliente||name||doc,
+        email:client?.email||"",emailConflict:client?.emailConflict||false,records:[],files:[]});
+      return map.get(key);
     }
-    records.filter(r => !r.sentAt).forEach(r => group(r.documento, r.cliente).records.push(r));
-    files.filter(f => !f.sentAt).forEach(f => group(f.documento).files.push(f));
-    return [...map.values()].map(g => ({ ...g, ready: validEmail(g.email) && g.files.length > 0,
-      total: g.records.reduce((sum,r) => sum + Number(r.valor || 0), 0) }));
+    records.filter(r=>!r.sentAt).forEach(r=>group(r.documento,r.cliente).records.push(r));
+    files.filter(f=>!f.sentAt).forEach(f=>group(f.documento).files.push(f));
+    return [...map.values()].map(g=>({...g,ready:validEmail(g.email)&&g.files.length>0,
+      total:g.records.reduce((sum,r)=>sum+Number(r.valor||0),0)}));
   }
   function gmailQuery(type="both",period="30",extra="") {
     const kinds={
@@ -121,5 +135,5 @@
     if(clean(extra).length>250)throw new Error("A busca adicional deve ter até 250 caracteres.");
     return ["has:attachment filename:pdf -in:sent -in:trash",period==="all"?"":"newer_than:"+period+"d",kinds[type],clean(extra)].filter(Boolean).join(" ");
   }
-  return { gmailQuery, clean, documentId, validEmail, escapeHtml, parseCsv, isoDate, amount, recordKey, importRecords, mergeRecords, invoiceNumber, groups };
+  return { documentKey, sameDocument, clientFor, gmailQuery, clean, documentId, validEmail, escapeHtml, parseCsv, isoDate, amount, recordKey, importRecords, mergeRecords, invoiceNumber, groups };
 });

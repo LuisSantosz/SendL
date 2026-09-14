@@ -6,7 +6,7 @@ function read(key,fallback) {
   if(!raw) return fallback;
   try { return JSON.parse(raw); } catch { throw new Error("Dados locais inválidos em "+key+". Exporte uma cópia antes de limpar o navegador."); }
 }
-let state, files=[], db, gmailState={connected:false}, page={}, activeView="dashboard", sendGroup=null, gmailPage=null, gmailQuery="", testOperation=null, toastTimer;
+let state, files=[], db, gmailState={connected:false}, page={}, activeView="dashboard", sendGroup=null, testOperation=null, toastTimer;
 const money=new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"});
 const uid=()=>crypto.randomUUID();
 function toast(message) { $("toast").textContent=message; $("toast").classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").classList.remove("show"),7000); }
@@ -75,11 +75,12 @@ async function reloadFiles() { files=await transaction("readonly",s=>s.getAll())
 function allGroups() {
   const groups=D.groups(state.records,state.clients,files);
   for(const [doc,op] of Object.entries(state.operations)) {
-    if(!groups.some(g=>g.documento===doc)) groups.push({documento:doc,cliente:state.clients.find(c=>c.documento===doc)?.cliente||doc,email:op.to,records:[],files:[],ready:false,total:0});
+    if(!groups.some(g=>D.sameDocument(g.documento,doc))) groups.push({documento:doc,cliente:D.clientFor(state.clients,doc)?.cliente||doc,email:op.to,records:[],files:[],ready:false,total:0});
   }
   return groups;
 }
-function locked(doc) { return Boolean(state.operations[doc]); }
+function operationKey(doc) { return Object.keys(state.operations).find(key=>D.sameDocument(key,doc))||doc; }
+function locked(doc) { return Boolean(state.operations[operationKey(doc)]); }
 function assertEditable(doc) { if(locked(doc)) throw new Error("Confira o resultado do envio anterior deste cliente antes de alterar os documentos."); }
 function paginate(name,items) {
   const total=Math.max(1,Math.ceil(items.length/PAGE_SIZE));
@@ -119,14 +120,14 @@ function render() {
   }
   if(activeView==="fila") {
     const rows=paginate("queue",search(groups,"queueSearch",["cliente","documento","email"]));
-    $("queueList").innerHTML=rows.map(g=>'<article class="queue-card"><div><h3>'+esc(g.cliente)+'</h3><p>'+esc(g.documento)+' · '+esc(g.email||"E-mail não cadastrado")+'</p><p>'+g.records.length+' título(s) · '+g.files.length+' PDF(s) · '+money.format(g.total)+'</p><span class="badge '+(g.ready&&!locked(g.documento)?"ok":"warn")+'">'+(locked(g.documento)?"Conferir envio anterior":g.ready?"Pronto para conferir":!D.validEmail(g.email)?"Falta um e-mail válido":"Falta vincular PDF")+'</span></div><div class="actions">'+(locked(g.documento)?'<button class="btn subtle" data-resolve="'+g.documento+'">Conferir resultado</button>':'<button class="btn primary" data-send="'+g.documento+'" '+(!g.ready||!gmailState.connected?"disabled":"")+'>Conferir e enviar</button>')+'</div></article>').join("")||'<div class="empty">A fila está vazia. Importe títulos ou vincule PDFs para começar.</div>';
+    $("queueList").innerHTML=rows.map(g=>'<article class="queue-card"><div><h3>'+esc(g.cliente)+'</h3><p>'+esc(g.documento)+' · '+esc(g.email||"E-mail não cadastrado")+'</p><p>'+g.records.length+' título(s) · '+g.files.length+' PDF(s) · '+money.format(g.total)+'</p><span class="badge '+(g.ready&&!locked(g.documento)?"ok":"warn")+'">'+(locked(g.documento)?"Conferir envio anterior":g.ready?"Pronto para conferir":g.emailConflict?"Cadastros com e-mails divergentes":!D.validEmail(g.email)?"Falta um e-mail válido":"Falta vincular PDF")+'</span></div><div class="actions">'+(locked(g.documento)?'<button class="btn subtle" data-resolve="'+g.documento+'">Conferir resultado</button>':'<button class="btn primary" data-send="'+g.documento+'" '+(!g.ready||!gmailState.connected?"disabled":"")+'>Conferir e enviar</button>')+'</div></article>').join("")||'<div class="empty">A fila está vazia. Importe títulos ou vincule PDFs para começar.</div>';
   }
   if(activeView==="documentos") {
     const selected=$("fileClient").value;
     $("fileClient").innerHTML='<option value="">Selecione o cliente</option>'+[...state.clients].sort((a,b)=>a.cliente.localeCompare(b.cliente)).map(c=>'<option value="'+esc(c.documento)+'">'+esc(c.cliente)+' · '+esc(c.documento)+'</option>').join("");
     $("fileClient").value=selected;
-    const directory=new Map(state.clients.map(c=>[c.documento,c.cliente]));
-    $("filesTable").innerHTML=paginate("files",files).map(f=>'<tr><td>'+esc(directory.get(f.documento)||f.documento)+'</td><td>'+esc(f.name)+'</td><td>'+esc(f.kind==="nota"?"Nota":"Boleto")+'</td><td><input aria-label="Número da nota" data-invoice="'+esc(f.id)+'" maxlength="30" value="'+esc(f.nota)+'" '+(f.sentAt||locked(f.documento)?"disabled":"")+'></td><td>'+(f.sentAt?"Enviado":"Na fila")+'</td><td><div class="actions"><button class="btn subtle" data-preview="'+esc(f.id)+'">Abrir</button><button class="btn danger" data-remove-file="'+esc(f.id)+'" '+(locked(f.documento)?"disabled":"")+'>Remover</button></div></td></tr>').join("")||empty(6,"Nenhum PDF vinculado.");
+    const directory=new Map(state.clients.map(c=>[D.documentKey(c.documento),c.cliente]));
+    $("filesTable").innerHTML=paginate("files",files).map(f=>'<tr><td>'+esc(directory.get(D.documentKey(f.documento))||f.documento)+'</td><td>'+esc(f.name)+'</td><td>'+esc(f.kind==="nota"?"Nota":"Boleto")+'</td><td><input aria-label="Número da nota" data-invoice="'+esc(f.id)+'" maxlength="30" value="'+esc(f.nota)+'" '+(f.sentAt||locked(f.documento)?"disabled":"")+'></td><td>'+(f.sentAt?"Enviado":"Na fila")+'</td><td><div class="actions"><button class="btn subtle" data-preview="'+esc(f.id)+'">Abrir</button><button class="btn danger" data-remove-file="'+esc(f.id)+'" '+(locked(f.documento)?"disabled":"")+'>Remover</button></div></td></tr>').join("")||empty(6,"Nenhum PDF vinculado.");
   }
 }
 async function refreshGmail() {
@@ -221,9 +222,9 @@ async function fileHash(blob) {
 }
 async function attach(blobs,doc,kind,sourcePrefix="local",quiet=false) {
   assertEditable(doc);
-  if(!state.clients.some(c=>c.documento===doc)) throw new Error("Selecione um cliente cadastrado.");
+  if(!state.clients.some(c=>D.sameDocument(c.documento,doc))) throw new Error("Selecione um cliente cadastrado.");
   const additions=[]; let duplicates=0;
-  const hashes=new Set(files.filter(f=>!f.sentAt&&f.documento===doc).map(f=>f.hash));
+  const hashes=new Set(files.filter(f=>!f.sentAt&&D.sameDocument(f.documento,doc)).map(f=>f.hash));
   for(const item of blobs) {
     const blob=item.blob, name=item.name;
     if(blob.size>MAX_BYTES || !/\.pdf$/i.test(name) || name.length>180 || /[\r\n/\\\x00]/.test(name)) throw new Error("PDF inválido ou maior que 12 MB: "+name);
@@ -244,7 +245,7 @@ function preview(id) {
 }
 function openSend(doc) {
   assertEditable(doc);
-  const group=allGroups().find(g=>g.documento===doc);
+  const group=allGroups().find(g=>D.sameDocument(g.documento,doc));
   if(!group?.ready) throw new Error("Complete o e-mail e os anexos do cliente.");
   if(group.files.reduce((sum,f)=>sum+f.blob.size,0)>MAX_BYTES || group.files.length>30) throw new Error("O grupo excede 12 MB ou 30 PDFs. Remova alguns anexos antes de enviar.");
   sendGroup=group; $("sendClient").textContent=group.cliente+" · "+doc; $("sendTo").value=group.email;
@@ -266,6 +267,7 @@ async function markSent(doc,op) {
   await reloadFiles(); render();
 }
 async function resolveOperation(doc) {
+  doc=operationKey(doc);
   const op=state.operations[doc]; if(!op) return;
   const remote=await api("/api/email/operations/"+op.id);
   if(remote.status==="sent") {await markSent(doc,op);toast("O Gmail confirmou o envio. Fila atualizada.");return;}
@@ -280,47 +282,63 @@ async function resolveOperation(doc) {
   if(delivered) await markSent(doc,op); else update(s=>delete s.operations[doc]);
   render();toast(delivered?"Envio confirmado manualmente.":"Nova tentativa liberada após sua conferência.");
 }
-async function searchGmail(next=false) {
- if(!next){gmailQuery=D.gmailQuery($("gmailType").value,$("gmailPeriod").value,$("gmailQuery").value);gmailPage=null;}
- $("gmailNext").hidden=true;
- $("gmailResults").textContent="Buscando e associando documentos à remessa…";
- const params=new URLSearchParams({q:gmailQuery});if(next&&gmailPage)params.set("pageToken",gmailPage);
- let linked=0,skipped=0,pending=0;const output=[];
+let stopCollection=false;
+async function searchGmail() {
+ const records=state.records.filter(r=>!r.sentAt);
+ const queries=window.SendLMatching.remessaQueries(records,D.gmailQuery($("gmailType").value,$("gmailPeriod").value,$("gmailQuery").value));
+ stopCollection=false;$("gmailStop").hidden=false;$("gmailStop").textContent="Interromper busca";
+ let linked=0,skipped=0,pending=0,messages=0,finished=0;
+ const output=[],seen=new Set();
+ function progress(status="Buscando"){
+  $("gmailResults").innerHTML="<p>"+esc(status)+" · "+finished+"/"+queries.length+" buscas da remessa · "+messages+" mensagem(ns) · "+linked+" vinculado(s), "+skipped+" já coletado(s), "+pending+" pendente(s).</p>"+output.join("");
+ }
+ progress();
  try{
-  const result=await api("/api/gmail/documents?"+params);
-  for(const m of result.messages){
-   const items=[];
-   for(const f of m.files){
-    const source="gmail:"+m.id+":"+f.partId;let reason="";
-    try{
-     if(files.some(file=>file.source===source)){skipped++;items.push("<p>"+esc(f.name)+" — já coletado.</p>");continue;}
-     const result=await api("/api/gmail/documents/"+encodeURIComponent(m.id)+"/attachment?"+new URLSearchParams({partId:f.partId,analyze:"1"}));
-     const match=window.SendLMatching.matchDocument(result,state.records);
-     if(match.documento){
-      assertEditable(match.documento);
-      if(!state.clients.some(c=>c.documento===match.documento)){
-       const record=state.records.find(r=>r.documento===match.documento);
-       update(s=>s.clients.push({id:uid(),documento:match.documento,cliente:record.cliente||match.documento,email:"",estado:""}));
-      }
-      const blob=blobFromBase64(result.contentBytes),hash=await fileHash(blob);
-      if(files.some(file=>file.hash===hash)){skipped++;items.push("<p>"+esc(f.name)+" — PDF já coletado.</p>");continue;}
-      const count=await attach([{name:result.name,blob}],match.documento,match.kind,source,true);
-      linked+=count;
-      items.push("<p>"+esc(f.name)+" — vinculado automaticamente a "+esc(state.clients.find(c=>c.documento===match.documento).cliente)+" ("+esc(match.reason)+").</p>");
-      continue;
+  for(const query of queries){
+   let token=null;const tokens=new Set();
+   do{
+    if(stopCollection)break;
+    const params=new URLSearchParams({q:query});if(token)params.set("pageToken",token);
+    const pageResult=await api("/api/gmail/documents?"+params);
+    for(const message of pageResult.messages){
+     if(stopCollection)break;
+     messages++;
+     for(const file of message.files){
+      if(stopCollection)break;
+      const source="gmail:"+message.id+":"+file.partId;
+      if(seen.has(source))continue;seen.add(source);
+      if(files.some(f=>f.source===source)){skipped++;progress();continue;}
+      let reason="";
+      try{
+       const result=await api("/api/gmail/documents/"+encodeURIComponent(message.id)+"/attachment?"+new URLSearchParams({partId:file.partId,analyze:"1"}));
+       const match=window.SendLMatching.matchDocument({...result,subject:message.subject},records);
+       if(match.documento){
+        assertEditable(match.documento);
+        if(!D.clientFor(state.clients,match.documento)){
+         const record=records.find(r=>D.sameDocument(r.documento,match.documento));
+         update(s=>s.clients.push({id:uid(),documento:match.documento,cliente:record.cliente||match.documento,email:"",estado:""}));
+        }
+        const blob=blobFromBase64(result.contentBytes),hash=await fileHash(blob);
+        if(files.some(f=>f.hash===hash)){skipped++;progress();continue;}
+        linked+=await attach([{name:result.name,blob}],match.documento,match.kind,source,true);
+        output.push("<p>"+esc(file.name)+" — vinculado automaticamente a "+esc(D.clientFor(state.clients,match.documento).cliente)+".</p>");
+       }else reason=match.reason;
+      }catch(error){reason=error.message;}
+      if(reason){pending++;output.push("<p>"+esc(file.name)+" — Pendente: "+esc(reason)+"</p>");}
+      progress();
      }
-     reason=match.reason;
-    }catch(error){reason=error.message;}
-    pending++;
-    items.push("<p>"+esc(f.name)+" — Pendente: "+esc(reason)+"</p>"+'<button class="btn subtle" data-gmail-message="'+esc(m.id)+'" data-gmail-part="'+esc(f.partId)+'">Vincular manualmente '+esc(f.name)+'</button>');
-   }
-   output.push('<div class="mail-result"><strong>'+esc(m.subject)+'</strong><small>'+esc(m.from)+' · '+esc(m.date)+'</small>'+items.join("")+'</div>');
-   $("gmailResults").innerHTML="<p>"+linked+" vinculado(s), "+skipped+" já coletado(s), "+pending+" pendente(s).</p>"+output.join("");
+    }
+    token=pageResult.nextPageToken;
+    if(token&&tokens.has(token))throw Error("O Gmail repetiu uma página. Os vínculos concluídos foram mantidos; tente buscar novamente.");
+    if(token)tokens.add(token);
+   }while(token&&!stopCollection);
+   if(stopCollection)break;
+   finished++;progress();
   }
-  if(!result.messages.length)$("gmailResults").textContent="Nenhum PDF encontrado nesta página.";
-  gmailPage=result.nextPageToken;$("gmailNext").hidden=!gmailPage;
+  progress(stopCollection?"Busca interrompida; vínculos concluídos mantidos":"Busca da remessa concluída");
   toast(linked+" PDF(s) vinculado(s) automaticamente; "+pending+" pendente(s).");
- }catch(error){$("gmailResults").textContent=error.message;throw error;}
+ }catch(error){progress("Busca interrompida: "+error.message);throw error;}
+ finally{$("gmailStop").hidden=true;}
 }
 async function exportBackup() {
   const entries=[];
@@ -385,15 +403,15 @@ async function start() {
   action("clientsFile","change",()=>prepareExcel("clientsFile"));
   action("recordsFile","change",()=>prepareExcel("recordsFile"));
   action("clientsForm","submit",async()=>{
-    const rows=D.parseCsv(await importText("clientsFile")), directory=new Map(state.clients.map(c=>[c.documento,c]));
+    const rows=D.parseCsv(await importText("clientsFile")), directory=new Map(state.clients.map(c=>[D.documentKey(c.documento),D.clientFor(state.clients,c.documento)]));
     let imported=0,ignored=0;
     for(const row of rows) {
       const documento=D.documentId(row.documento||row.cnpj||row.cpf||row.cpf_cnpj||row.cnpj_cpf), cliente=D.clean(row.cliente||row.nome||row.razao_social);
       const email=D.clean(row.email||row.e_mail||row.email_financeiro||row.e_mail_financeiro).toLowerCase();
       if(!cliente||![11,14].includes(documento.length)||email&&!D.validEmail(email)) {ignored++;continue;}
       assertEditable(documento);
-      const existing=directory.get(documento);
-      directory.set(documento,{...existing,id:existing?.id||uid(),cliente,documento,email:email||existing?.email||"",estado:D.clean(row.estado||row.uf||existing?.estado).toUpperCase()});
+      const existing=directory.get(D.documentKey(documento));
+      directory.set(D.documentKey(documento),{...existing,id:existing?.id||uid(),cliente,documento,email:email||existing?.email||"",estado:D.clean(row.estado||row.uf||existing?.estado).toUpperCase()});
       imported++;
     }
     if(!imported) throw new Error("Nenhum cliente válido. Confira o modelo CSV, CPF/CNPJ e e-mails.");
@@ -417,7 +435,7 @@ async function start() {
     const form=new FormData(e.currentTarget), doc=D.documentId(form.get("documento")), id=form.get("id")||uid(), email=D.clean(form.get("email")).toLowerCase();
     assertEditable(doc);
     if(![11,14].includes(doc.length)||email&&!D.validEmail(email)) throw new Error("Confira o CPF/CNPJ e o e-mail.");
-    if(state.clients.some(c=>c.documento===doc&&c.id!==id)) throw new Error("Este CPF/CNPJ já está cadastrado.");
+    if(state.clients.some(c=>D.sameDocument(c.documento,doc)&&c.id!==id)) throw new Error("Este CPF/CNPJ já está cadastrado.");
     const client={id,documento:doc,cliente:D.clean(form.get("cliente")),email,estado:D.clean(form.get("estado")).toUpperCase()};
     update(s=>{const i=s.clients.findIndex(c=>c.id===id);if(i<0)s.clients.push(client);else s.clients[i]={...s.clients[i],...client};});
     $("clientDialog").close();render();toast("Cliente salvo.");
@@ -466,7 +484,7 @@ async function start() {
     if(result.ok){testOperation=null;$("testFeedback").textContent="E-mail de teste enviado.";log("Teste enviado");}
   });
   action("gmailSearchForm","submit",()=>searchGmail(false));
-  action("gmailNext","click",()=>searchGmail(true));
+  $("gmailStop").addEventListener("click",()=>{stopCollection=true;$("gmailStop").textContent="Interrompendo…";});
   action("exportBackup","click",exportBackup);action("restoreForm","submit",restoreBackup);
   action("clientTemplate","click",()=>excelTemplate("clients"));
   action("recordTemplate","click",()=>excelTemplate("records"));
@@ -494,7 +512,7 @@ async function start() {
       if(button.dataset.gmailMessage) {
         const doc=$("fileClient").value;assertEditable(doc);
         if(!doc)throw new Error("Selecione o cliente no formulário de vinculação antes de importar do Gmail.");
-        const client=state.clients.find(c=>c.documento===doc);
+        const client=D.clientFor(state.clients,doc);
         if(!confirm("Vincular este PDF ao cliente "+client.cliente+" ("+doc+")?"))return;
         const result=await api("/api/gmail/documents/"+encodeURIComponent(button.dataset.gmailMessage)+"/attachment?partId="+encodeURIComponent(button.dataset.gmailPart));
         await attach([{name:result.name,blob:blobFromBase64(result.contentBytes)}],doc,$("fileKind").value,"gmail:"+button.dataset.gmailMessage+":"+button.dataset.gmailPart);

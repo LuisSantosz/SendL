@@ -1,6 +1,6 @@
 {
   "name": "sendl",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "Central de documentos Edel White com envio por Gmail",
   "main": "server.js",
