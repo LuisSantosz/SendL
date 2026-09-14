@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>SendL · Central de documentos</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="domain.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body class="locked">
+  <section id="loginScreen" class="login-screen">
+    <article class="login-card">
+      <div class="brand"><span class="brand-mark">SL</span><div><strong>SendL</strong><small>Edel White</small></div></div>
+      <p class="eyebrow">CENTRAL DE DOCUMENTOS</p>
+      <h1>Seu financeiro.<br>Mais organizado.</h1>
+      <p>Boletos e notas no mesmo lugar, prontos para chegar ao cliente.</p>
+      <form id="loginForm">
+        <label>E-mail de acesso<input type="email" name="email" autocomplete="username" required></label>
+        <label>Senha<input type="password" name="password" autocomplete="current-password" required></label>
+        <button class="btn primary" type="submit">Entrar no SendL →</button>
+        <p id="loginFeedback" role="status"></p>
+      </form>
+    </article>
+  </section>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">SL</span><div><strong>SendL</strong><small>Edel White</small></div></div>
+    <p class="nav-label">ÁREA DE TRABALHO</p>
+    <nav aria-label="Navegação principal">
+      <button class="nav-item active" data-view="dashboard" aria-current="page">Visão geral</button>
+      <button class="nav-item" data-view="remessa">Importar remessa</button>
+      <button class="nav-item" data-view="fila">Fila de envio <span id="queueCount">0</span></button>
+      <button class="nav-item" data-view="documentos">Documentos</button>
+      <button class="nav-item" data-view="clientes">Clientes</button>
+      <button class="nav-item" data-view="configuracoes">Configurações</button>
+    </nav>
+    <div class="sidebar-note"><span class="dot"></span> Envio por e-mail<p>Organize. Confira. Envie.</p></div>
+  </aside>
+  <main class="app">
+    <header class="topbar">
+      <div><p class="eyebrow">SEU DIA, SOB CONTROLE</p><h1 id="pageTitle">Visão geral</h1><time id="clock"></time></div>
+      <div class="actions"><span id="connectionPill" class="badge">Gmail · verificando</span><button class="btn subtle" id="themeToggle" aria-label="Alternar tema">Tema claro</button><button class="btn subtle" id="logout">Sair</button></div>
+    </header>
+    <section class="view active" id="dashboard">
+      <div class="hero"><div><p class="eyebrow">UM FLUXO MAIS SIMPLES</p><h2>Documentos em ordem.<br>Envios sem complicação.</h2><p>Importe a remessa, vincule os PDFs e confira os destinatários antes de enviar.</p></div><button class="btn primary" data-go="fila">Abrir fila de envio ↗</button></div>
+      <div class="stats">
+        <article class="stat"><span>Clientes cadastrados</span><strong id="statClients">0</strong><small>Sua base de contatos</small></article>
+        <article class="stat"><span>Títulos importados</span><strong id="statRecords">0</strong><small>Com duplicidades filtradas</small></article>
+        <article class="stat"><span>Prontos para envio</span><strong id="statReady">0</strong><small>Clientes com e-mail e PDF</small></article>
+        <article class="stat"><span>Precisam de atenção</span><strong id="statPending">0</strong><small>Falta e-mail ou documento</small></article>
+      </div>
+      <article class="panel"><div class="panel-head"><div><h2>Atividade recente</h2><p>Histórico deste navegador.</p></div><span class="badge">Últimas 30 ações</span></div><div id="logs" class="logs"></div></article>
+    </section>
+    <section class="view" id="remessa">
+      <div class="two-cols">
+        <article class="panel"><p class="eyebrow">01 · IMPORTE</p><h2>Remessa diária</h2><p>CNAB 400 compatível com a versão anterior ou CSV com os títulos. Confira os valores após importar.</p>
+          <form id="recordsForm"><label>Arquivo de remessa<input id="recordsFile" type="file" accept=".txt,.rem,.ret,.csv" required></label><button class="btn primary">Importar títulos</button></form>
+          <button id="recordTemplate" class="btn subtle">Baixar modelo CSV</button><p id="recordsFeedback" role="status"></p>
+        </article>
+        <article class="panel"><h2>Do arquivo ao envio</h2><ol class="steps"><li>Cadastre ou importe os clientes com CPF/CNPJ e e-mail.</li><li>Importe os títulos e confira nota, vencimento e valor.</li><li>Em Documentos, selecione o cliente e vincule os PDFs.</li><li>Confira os anexos e o destinatário na fila de envio.</li></ol><p class="notice">Os títulos de um mesmo CPF/CNPJ são reunidos em um envio. O nome do PDF sugere o número da nota; a escolha do cliente é sempre sua.</p></article>
+      </div>
+      <article class="panel"><div class="panel-head"><h2>Títulos importados</h2><label class="search-label">Pesquisar<input id="recordSearch" type="search" placeholder="Cliente, documento ou nota"></label></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Nota / título</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody id="recordsTable"></tbody></table></div><div id="recordsPager" class="pager"></div></article>
+    </section>
+    <section class="view" id="fila">
+      <article class="panel"><div class="panel-head"><div><p class="eyebrow">03 · CONFIRA E ENVIE</p><h2>Um envio por cliente</h2><p>Envie somente boleto, somente nota ou os dois juntos. Limite de 12 MB e 30 PDFs por e-mail.</p></div><button class="btn danger" id="clearQueue">Limpar fila</button></div><label>Pesquisar na fila<input id="queueSearch" type="search" placeholder="Cliente ou CPF/CNPJ"></label><div id="queueList" class="queue-list"></div><div id="queuePager" class="pager"></div></article>
+    </section>
+    <section class="view" id="documentos">
+      <div class="two-cols">
+        <article class="panel"><p class="eyebrow">02 · VINCULE</p><h2>Anexar PDFs</h2><p>Selecione o cliente que deve receber os documentos. Você pode anexar vários arquivos de uma vez.</p>
+          <form id="filesForm"><label>Cliente<select id="fileClient" required></select></label><label>Tipo<select id="fileKind"><option value="boleto">Boleto</option><option value="nota">Nota fiscal</option></select></label><label>Arquivos PDF<input id="pdfFiles" type="file" accept=".pdf,application/pdf" multiple required></label><button class="btn primary">Vincular documentos</button></form>
+        </article>
+        <article class="panel"><h2>Buscar PDFs no Gmail</h2><p>Localize os anexos recebidos e escolha para qual cliente vinculá-los.</p><form id="gmailSearchForm"><label>Busca no Gmail<input id="gmailQuery" value="has:attachment filename:pdf newer_than:30d -in:sent -in:trash"></label><button class="btn subtle">Buscar documentos</button></form><div id="gmailResults"></div><button id="gmailNext" class="btn subtle" hidden>Mais mensagens</button></article>
+      </div>
+      <article class="panel"><div class="panel-head"><div><h2>Documentos vinculados</h2><p>Confira o cliente e ajuste o número da nota quando necessário.</p></div></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Arquivo</th><th>Tipo</th><th>Nota</th><th>Status</th><th>Ações</th></tr></thead><tbody id="filesTable"></tbody></table></div><div id="filesPager" class="pager"></div></article>
+    </section>
+    <section class="view" id="clientes">
+      <div class="two-cols">
+        <article class="panel"><h2>Importar clientes</h2><p>CSV com cliente, documento, email e estado. No Excel, salve como CSV UTF-8.</p><form id="clientsForm"><label>Arquivo CSV<input id="clientsFile" type="file" accept=".csv,.txt" required></label><button class="btn primary">Importar base</button></form><button id="clientTemplate" class="btn subtle">Baixar modelo CSV</button><p id="clientsFeedback" role="status"></p></article>
+        <article class="panel"><h2>Sua base, organizada</h2><p>A importação atualiza pelo CPF/CNPJ e preserva os dados já preenchidos quando a coluna importada estiver vazia.</p><div class="actions"><button id="newClient" class="btn primary">Adicionar cliente</button><button id="exportClients" class="btn subtle">Exportar CSV</button><button id="clearClients" class="btn danger">Limpar base</button></div><p class="notice">Clientes sem e-mail continuam cadastrados, mas ficam bloqueados para envio até completar o contato.</p></article>
+      </div>
+      <article class="panel"><div class="panel-head"><h2>Clientes cadastrados</h2><label class="search-label">Pesquisar<input id="clientSearch" type="search" placeholder="Nome, e-mail ou CPF/CNPJ"></label></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>E-mail</th><th>UF</th><th>Ações</th></tr></thead><tbody id="clientsTable"></tbody></table></div><div id="clientsPager" class="pager"></div></article>
+    </section>
+    <section class="view" id="configuracoes">
+      <div class="two-cols">
+        <article class="panel"><p class="eyebrow">CONEXÃO DE E-MAIL</p><h2>Gmail</h2><div class="connection"><strong id="gmailStatus">Verificando…</strong><p id="gmailDetails"></p></div><div class="actions"><a class="btn primary" href="/api/auth/gmail/login">Conectar Gmail</a><button id="refreshGmail" class="btn subtle">Atualizar status</button><button id="disconnectGmail" class="btn danger">Desconectar</button></div><p>Ao conectar, autorize a leitura dos documentos e o envio de e-mails.</p></article>
+        <article class="panel"><h2>Verificar o envio</h2><p>Envie um e-mail de teste para um endereço informado por você.</p><form id="testForm"><label>Destinatário<input type="email" name="to" required placeholder="seuemail@exemplo.com"></label><button class="btn primary">Enviar teste</button></form><p id="testFeedback" role="status"></p></article>
+      </div>
+      <article class="panel"><h2>Seus dados</h2><p>Clientes e títulos ficam neste navegador. Os PDFs ficam no armazenamento local do navegador e permanecem após atualizar a página. Limpar os dados do site ou trocar de computador não transfere esses arquivos.</p><button class="btn subtle" id="exportBackup">Exportar backup completo</button><form id="restoreForm"><label>Restaurar backup do SendL<input id="backupFile" type="file" accept=".json" required></label><button class="btn subtle">Restaurar dados</button></form><p>O backup inclui dados de clientes e PDFs. Guarde-o em local reservado.</p></article>
+    </section>
+    <footer>SendL · Edel White <span>Central de documentos por e-mail</span></footer>
+  </main>
+  <dialog id="clientDialog"><form id="clientEditor"><div class="panel-head"><h2>Dados do cliente</h2><button type="button" class="btn subtle" data-close="clientDialog" aria-label="Fechar">×</button></div><input name="id" type="hidden"><label>Nome<input name="cliente" required maxlength="160"></label><label>CPF/CNPJ<input name="documento" required inputmode="numeric" maxlength="18"></label><label>E-mail<input name="email" type="email"></label><label>Estado (UF)<input name="estado" maxlength="2"></label><button class="btn primary">Salvar cliente</button></form></dialog>
+  <dialog id="sendDialog"><form id="sendForm"><div class="panel-head"><h2>Conferir envio</h2><button type="button" class="btn subtle" data-close="sendDialog" aria-label="Fechar">×</button></div><p id="sendClient"></p><label>Destinatário<input id="sendTo" type="email" required></label><label>Assunto<input id="sendSubject" required maxlength="200"></label><label>Mensagem<textarea id="sendText" rows="6" required maxlength="20000"></textarea></label><div id="sendFiles" class="attachment-list"></div><p>Confira cada PDF antes de confirmar. O envio será realizado pelo Gmail conectado.</p><button class="btn primary">Confirmar e enviar</button></form></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
