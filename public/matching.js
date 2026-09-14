@@ -10,7 +10,7 @@ function matchDocument(file,records){
  const kind=/BOLETO|FICHA DE COMPENSACAO|\bBOL[_ .-]/.test(hay)?"boleto":/DANFE|NOTA FISCAL|\bNF[E_ .-]/.test(hay)?"nota":"";
  if(!kind)return pending("Tipo de documento não identificado.");
  const recipients=new Set();
- for(const m of text.matchAll(/(?:PAGADOR|SACADO|DESTINATARIO(?:\s*\/\s*REMETENTE)?)([\s\S]{0,220})/g)){
+ for(const m of text.matchAll(/(?:PAGADOR|SACADO|DESTINATARIO(?:\s*\/\s*REMETENTE)?)(?=([\s\S]{0,220}))/g)){
   const section=m[1].split(/BENEFICIARIO|CEDENTE|EMITENTE|AVALISTA|TRANSPORTADOR/)[0];
   const id=section.match(/(?:\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}|\b\d{14}\b|\b\d{11}\b)/);
   if(id)recipients.add(id[0].replace(/\D/g,""));
