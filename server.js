@@ -57,6 +57,7 @@ function googleMissing() {
 }
 function googleError(error) {
   const code = error.response?.data?.error;
+  if (code === "invalid_client") return fail(400,"Client ID ou Client Secret do Google inválido. Confira os valores no .env e reinicie o servidor.");
   if (code === "invalid_grant" || error.response?.status === 401) return fail(401,"Autorização do Gmail expirada ou revogada. Conecte a conta novamente.");
   if (error.response?.status === 403) return fail(403,"O Google negou a permissão. Confira a Gmail API e autorize os acessos de leitura e envio.");
   if (error.response?.status === 429) return fail(429,"Limite do Gmail atingido. Aguarde antes de tentar novamente.");
