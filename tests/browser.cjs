@@ -1,0 +1,186 @@
+"use strict";
+const assert=require("node:assert/strict"), fs=require("node:fs/promises"), os=require("node:os"), path=require("node:path");
+const {chromium}=require("playwright");
+const XLSX=require("xlsx");
+(async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),"sendl-browser-"));
+  Object.assign(process.env,{DATA_DIR:root,ADMIN_EMAIL:"admin@example.com",ADMIN_PASSWORD:"test-password-long",NODE_ENV:"test",APP_ORIGIN:"http://localhost:3000"});
+  delete process.env.RAILWAY_ENVIRONMENT;
+  let browser,server,page;
+  try {
+    server=require("node:http").createServer();
+    await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+    const base="http://127.0.0.1:"+server.address().port;
+    process.env.APP_ORIGIN=base;
+    server.on("request",require("../server"));
+    browser=await chromium.launch({headless:true});
+    const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
+    page=await context.newPage();page.setDefaultTimeout(15000);
+    const errors=[];page.on("pageerror",error=>errors.push(error.message));
+    const sent=[];
+    await page.route("**/api/auth/gmail/status",route=>route.fulfill({json:{configured:true,connected:true,email:"sender@example.com"}}));
+    await page.route("**/api/email/send",async route=>{
+      const body=route.request().postDataJSON();sent.push(body);
+      await route.fulfill({json:{ok:true,status:"sent",messageId:"simulated",sentAt:new Date().toISOString()}});
+    });
+    await page.route("**/api/gmail/documents?*",async route=>{
+      const q=new URL(route.request().url()).searchParams.get("q");
+      assert.ok(q.includes("filename:pdf")&&q.includes("subject:NFe")&&q.includes("newer_than:30d"));
+      await route.fulfill({json:{messages:[{id:"gmail-test",subject:"Nota Fiscal Eletronica (42217)",from:"notas@example.com",date:"14/09/2026",files:[{name:"NFe_42217.pdf",partId:"1"}]}],nextPageToken:null}});
+    });
+    await page.route("**/api/gmail/documents/gmail-test/attachment?*",route=>route.fulfill({json:{name:"NFe_42217.pdf",contentBytes:Buffer.from("%PDF-1.4\nnota coletada do Gmail\n%%EOF").toString("base64")}}));
+    await page.goto(base);
+    await page.locator('#loginForm [name="email"]').fill("admin@example.com");
+    await page.locator('#loginForm [name="password"]').fill("test-password-long");
+    await page.locator("#loginForm button").click();
+    await page.locator("body:not(.locked)").waitFor();
+    await page.waitForFunction(()=>document.getElementById("connectionPill").textContent.includes("conectado"));
+    assert.ok((await page.locator("footer").textContent()).includes("WDL ESTÚDIO DIGITAL"));
+    assert.equal(await page.locator('footer a[href^="tel:"]').getAttribute("href"),"tel:+5511966442591");
+    console.log("PASS login autenticado no servidor e assinatura WDL");
+    await page.locator('[data-view="clientes"]').click();
+    await page.locator("#clientsFile").setInputFiles({name:"clientes.csv",mimeType:"text/csv",buffer:Buffer.from("cliente;documento;email;estado\nLoja Teste;12345678000199;cliente@example.com;SP\n")});
+    await page.locator("#clientsForm button").click();
+    await page.waitForFunction(()=>document.getElementById("clientsTable").textContent.includes("Loja Teste"));
+    for(const [ext,bookType,doc] of [["xlsx","xlsx","01234567000199"],["xls","biff8","02345678000199"]]){
+      const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([["Instrucoes"],["Selecione Clientes"]]),"Inicio");
+      XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([["Cliente","CPF/CNPJ","E-mail","Estado"],["Excel "+ext,doc,"excel@example.com","SP"]]),"Clientes");
+      await page.locator("#clientsFile").setInputFiles({name:"clientes."+ext,mimeType:"application/octet-stream",buffer:XLSX.write(book,{bookType,type:"buffer"})});
+      await page.locator("#clientsSheetLabel").waitFor();
+      await page.locator("#clientsSheet").selectOption("Clientes");
+      await page.locator("#clientsForm button").click();
+      await page.waitForFunction(doc=>document.getElementById("clientsTable").textContent.includes(doc),doc);
+    }
+    console.log("PASS Excel XLSX e XLS com seleção de aba e CPF/CNPJ com zero inicial");
+    await page.locator('[data-view="remessa"]').click();
+    await page.locator("#recordsFile").setInputFiles({name:"titulos.csv",mimeType:"text/csv",buffer:Buffer.from("cliente;documento;nota;valor;vencimento\nLoja Teste;12345678000199;42215;100,00;30/09/2026\nLoja Teste;12345678000199;42216;200,00;30/10/2026\nLoja Teste;12345678000199;42215;100,00;30/09/2026\n")});
+    await page.locator("#recordsForm button").click();
+    await page.waitForFunction(()=>document.getElementById("recordsFeedback").textContent.includes("2 adicionado(s); 1 duplicado(s)"));
+    const book=XLSX.utils.book_new(),sheet=XLSX.utils.aoa_to_sheet([["cliente","documento","nota","valor","vencimento"],["Loja Teste","12345678000199","42215",100,"2026-09-30"]]);
+    XLSX.utils.book_append_sheet(book,sheet,"Titulos");
+    await page.locator("#recordsFile").setInputFiles({name:"titulos.xlsx",mimeType:"application/octet-stream",buffer:XLSX.write(book,{bookType:"xlsx",type:"buffer"})});
+    await page.waitForFunction(()=>document.querySelector("#recordsSheet option")?.value==="Titulos");
+    await page.locator("#recordsForm button").click();
+    await page.waitForFunction(()=>document.getElementById("recordsFeedback").textContent.includes("0 adicionado(s); 1 duplicado(s)"));
+    console.log("PASS importações CSV/Excel e filtro de duplicidade");
+    await page.locator('[data-view="documentos"]').click();
+    await page.locator("#fileClient").selectOption("12345678000199");
+    const pdf=(name,text)=>({name,mimeType:"application/pdf",buffer:Buffer.from("%PDF-1.4\n"+text+"\n%%EOF")});
+    await page.locator("#pdfFiles").setInputFiles([pdf("BOL_42215.pdf","boleto 1"),pdf("BOL_42216.pdf","boleto 2")]);
+    await page.locator("#filesForm button").click();
+    await page.waitForFunction(()=>document.querySelectorAll("#filesTable [data-preview]").length===2);
+    await page.locator("#fileKind").selectOption("nota");
+    await page.locator("#pdfFiles").setInputFiles(pdf("NFe_42215.pdf","nota fiscal"));
+    await page.locator("#filesForm button").click();
+    await page.waitForFunction(()=>document.querySelectorAll("#filesTable [data-preview]").length===3);
+    await page.reload();
+    await page.locator("body:not(.locked)").waitFor();
+    await page.locator('[data-view="documentos"]').click();
+    await page.waitForFunction(()=>document.querySelectorAll("#filesTable [data-preview]").length===3);
+    console.log("PASS PDFs persistem no IndexedDB após recarregar");
+    const second=await context.newPage();await second.goto(base);
+    await second.waitForFunction(()=>document.getElementById("loginFeedback").textContent.includes("outra aba"));
+    await second.close();
+    console.log("PASS bloqueio de edição concorrente em outra aba");
+    await page.locator('[data-view="configuracoes"]').click();
+    const downloadPromise=page.waitForEvent("download");await page.locator("#exportBackup").click();
+    const download=await downloadPromise, backupPath=path.join(root,"backup.json");
+    await download.saveAs(backupPath);
+    const backup=JSON.parse(await fs.readFile(backupPath,"utf8"));
+    assert.equal(backup.files.length,3);assert.equal(backup.state.records.length,2);
+    page.on("dialog",dialog=>dialog.accept());
+    await page.locator('[data-view="fila"]').click();
+    await page.locator("#clearQueue").click();
+    await page.waitForFunction(()=>document.querySelectorAll(".queue-card").length===0);
+    await page.locator('[data-view="configuracoes"]').click();
+    await page.locator("#backupFile").setInputFiles(backupPath);
+    await page.locator("#restoreForm button").click();
+    await page.waitForFunction(()=>document.getElementById("toast").textContent==="Backup restaurado.");
+    console.log("PASS backup completo, limpeza e restauração de PDFs");
+    await page.locator('[data-view="fila"]').click();
+    await page.locator(".queue-card").waitFor();
+    assert.equal(await page.locator(".queue-card").count(),1);
+    assert.ok((await page.locator(".queue-card").textContent()).includes("3 PDF(s)"));
+    for(const width of [1440,390,320]){
+      await page.setViewportSize({width,height:950});
+      for(const view of ["dashboard","remessa","fila","documentos","clientes","configuracoes"]){
+        await page.locator('[data-view="'+view+'"]').click();
+        const fits=await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth);
+        assert.ok(fits,"Overflow horizontal em "+view+" com "+width+"px");
+      }
+    }
+    console.log("PASS conteúdo contido em 1440, 390 e 320px nas seis telas");
+    await page.setViewportSize({width:1440,height:1000});
+    await page.locator("#themeToggle").click();
+    assert.equal(await page.locator("html").getAttribute("data-theme"),"light");
+    await page.locator('[data-view="fila"]').click();
+    await page.locator("[data-send]").click();
+    assert.equal(await page.locator("#sendTo").inputValue(),"cliente@example.com");
+    assert.equal(await page.locator("#sendFiles .attachment").count(),3);
+    await page.locator("#sendForm > button").click();
+    await page.waitForFunction(()=>document.querySelectorAll(".queue-card").length===0);
+    assert.equal(sent.length,1);assert.equal(sent[0].attachments.length,3);
+    assert.equal(sent[0].to,"cliente@example.com");
+    console.log("PASS conferência e envio simulado: três PDFs em um e-mail");
+    // Real fixed-width CNAB, stored client CPF without the three bank padding zeroes.
+    await page.locator('[data-view="clientes"]').click();
+    await page.locator("#clientsFile").setInputFiles({name:"cpf.csv",mimeType:"text/csv",buffer:Buffer.from("cliente;documento;email;estado\nAna Teste;93960697015;ana@example.com;RS\n")});
+    await page.locator("#clientsForm button").click();
+    await page.waitForFunction(()=>document.getElementById("clientsTable").textContent.includes("ana@example.com"));
+    const line=Array(400).fill(" ");line[0]="1";
+    const write=(offset,text)=>[...text].forEach((char,i)=>line[offset+i]=char);
+    write(40,"5010018735-013009260000000021480");write(220,"00093960697015");write(234,"Ana Teste");
+    await page.locator('[data-view="remessa"]').click();
+    await page.locator("#recordsFile").setInputFiles({name:"remessa.txt",mimeType:"text/plain",buffer:Buffer.from(line.join(""))});
+    await page.locator("#recordsForm button").click();
+    await page.waitForFunction(()=>document.getElementById("recordsFeedback").textContent.includes("1 adicionado(s)"));
+    await page.locator('[data-view="fila"]').click();
+    assert.ok((await page.locator(".queue-card").textContent()).includes("ana@example.com"));
+    let secondPage=0;
+    await page.route("**/api/gmail/documents?*",route=>{
+      const params=new URL(route.request().url()).searchParams,q=params.get("q");
+      assert.ok(q.includes('"5010018735-01"')||q.includes('"00093960697015"')||q.includes('"939.606.970-15"')||q.includes('"18735"')||q.includes('"000018735"'));
+      const next=params.get("pageToken");if(next)secondPage++;
+      return route.fulfill({json:{messages:[{id:next?"cnab-note":"cnab-bol",subject:"Boleto(s) Bancário Referente à NFe 000018735",files:[{name:next?"NFe_18735.pdf":"BOL_000018735.pdf",partId:"1"}]}],nextPageToken:next?null:"second"}});
+    });
+    await page.route("**/api/gmail/documents/cnab-*/attachment?*",route=>{
+      const note=route.request().url().includes("cnab-note");
+      return route.fulfill({json:{name:note?"NFe_18735.pdf":"BOL_000018735.pdf",
+        text:note?"NOTA FISCAL 18735\n5010018735-01\nDestinatario Ana 939.606.970-15":"Pagador Ana 939.606.970-15\nSacador/Avalista 12.345.678/0001-99\nVencimento 30/09/2026\nValor 214,80",
+        contentBytes:Buffer.from("%PDF-1.4\nCNAB "+(note?"nota":"boleto")+"\n%%EOF").toString("base64")}});
+    });
+    await page.locator('[data-view="documentos"]').click();
+    await page.locator("#fileClient").selectOption("01234567000199");
+    await page.locator("#gmailSearchForm button").click();
+    await page.waitForFunction(()=>document.getElementById("gmailResults").textContent.includes("Busca da remessa concluída"));
+    assert.ok((await page.locator("#gmailResults").textContent()).includes("2 vinculado(s)"));
+    assert.equal(await page.locator("[data-gmail-message]").count(),0);assert.ok(secondPage>0);
+    await page.reload();await page.locator("body:not(.locked)").waitFor();
+    await page.locator('[data-view="documentos"]').click();
+    await page.locator("#gmailSearchForm button").click();
+    await page.waitForFunction(()=>document.getElementById("gmailResults").textContent.includes("Busca da remessa concluída"));
+    assert.ok((await page.locator("#gmailResults").textContent()).includes("2 já coletado(s)"));
+    await page.locator('[data-view="fila"]').click();
+    await page.locator("[data-send]").click();
+    assert.equal(await page.locator("#sendTo").inputValue(),"ana@example.com");
+    assert.equal(await page.locator("#sendFiles .attachment").count(),2);
+    await page.locator("#sendForm > button").click();
+    await page.waitForFunction(()=>document.querySelectorAll(".queue-card").length===0);
+    assert.equal(sent.length,2);assert.equal(sent[1].to,"ana@example.com");
+    console.log("PASS CPF CNAB/cadastro, busca direcionada, paginação automática, sacador, vinculação, persistência e envio simulado");
+    assert.deepEqual(errors,[]);
+    console.log("PASS navegador sem erros JavaScript");
+  } catch(error) {
+    if(page) {
+      await fs.mkdir("test-results",{recursive:true});
+      await page.screenshot({path:"test-results/failure.png",fullPage:true}).catch(()=>{});
+      console.error("PAGE URL",page.url());
+      console.error("PAGE TEXT",(await page.locator("body").innerText().catch(()=>"")).slice(0,6000));
+    }
+    throw error;
+  } finally {
+    if(browser)await browser.close();
+    if(server)await new Promise(resolve=>server.close(resolve));
+    await fs.rm(root,{recursive:true,force:true});
+  }
+})().catch(error=>{console.error(error);process.exitCode=1;});
