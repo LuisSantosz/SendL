@@ -109,6 +109,14 @@ test("busca Gmail retorna anexos e baixa somente PDF selecionado",async()=>{
   assert.equal(Buffer.from(attachment.contentBytes,"base64").subarray(0,5).toString(),"%PDF-");
   assert.equal((await request("/api/gmail/documents/abc123/attachment?partId=2")).status,404);
 });
+test("diagnóstico Google exige sessão e não expõe segredo",async()=>{
+  const config=await (await request("/api/auth/gmail/config")).json();
+  assert.equal(config.email,"sender@example.com");
+  assert.deepEqual(config.missing,[]);
+  assert.equal(config.expectedRedirectUri,"http://localhost:3000/api/auth/gmail/callback");
+  assert.equal(config.redirectMatches,true);
+  assert.ok(!JSON.stringify(config).includes("test-secret"));
+});
 test("rotas antigas removidas e sessão encerrada",async()=>{
   assert.equal((await request("/api/webhooks/whatsapp")).status,404);
   assert.equal((await request("/api/auth/outlook/login")).status,404);

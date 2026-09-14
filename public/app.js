@@ -136,11 +136,55 @@ async function refreshGmail() {
   $("connectionPill").className="badge "+(gmailState.connected?"ok":"warn");
   $("gmailStatus").textContent=gmailState.connected?"Conta conectada":"Conexão pendente";
   $("gmailDetails").textContent=gmailState.message||gmailState.email||"Conecte sua conta para buscar e enviar documentos.";
+  try {
+    const config=await api("/api/auth/gmail/config");
+    const issues=[...(config.missing?.length?["Preencha no .env: "+config.missing.join(", ")+"."]:[]),...(config.redirectMatches?[]:["A URL de retorno precisa corresponder ao endereço em que o SendL está rodando."])];
+    $("gmailSetup").hidden=false;
+    $("gmailSetup").textContent="Conta de coleta: "+(config.email||"não configurada")+". URL de retorno para cadastrar no Google: "+config.expectedRedirectUri+". "+issues.join(" ");
+  } catch(error) { $("gmailSetup").hidden=false;$("gmailSetup").textContent=error.message; }
   render();
+}
+let excelLibrary;
+const workbookCache=new WeakMap();
+function loadExcel() {
+  if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(!excelLibrary)excelLibrary=new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src="/vendor/xlsx.full.min.js";
+    script.onload=()=>window.XLSX?resolve(window.XLSX):reject(new Error("Leitor Excel indisponível."));
+    script.onerror=()=>{script.remove();excelLibrary=null;reject(new Error("Não foi possível carregar o leitor Excel. Execute npm install e reinicie o servidor."));};
+    document.head.append(script);
+  });
+  return excelLibrary;
+}
+async function prepareExcel(input) {
+  const file=$(input).files[0],prefix=input==="clientsFile"?"clients":"records",label=$(prefix+"SheetLabel"),select=$(prefix+"Sheet");
+  if(!file||!/\.(xlsx|xls)$/i.test(file.name)){label.hidden=true;select.replaceChildren();return null;}
+  if(file.size>10*1024*1024)throw new Error("O arquivo deve ter até 10 MB.");
+  if(workbookCache.has(file))return workbookCache.get(file);
+  const XLSX=await loadExcel(),result=SendLExcel.read(XLSX,await file.arrayBuffer());
+  select.replaceChildren();
+  if(result.names.length>1)select.add(new Option("Selecione a planilha",""));
+  result.names.forEach(name=>select.add(new Option(name,name)));
+  label.hidden=result.names.length===1;
+  workbookCache.set(file,result);
+  return result;
+}
+async function excelTemplate(kind) {
+  const XLSX=await loadExcel();
+  const rows=kind==="clients"?[["cliente","documento","email","estado"],["CLIENTE EXEMPLO","12345678000199","financeiro@exemplo.com","SP"]]:
+    [["cliente","documento","nota","valor","vencimento"],["CLIENTE EXEMPLO","12345678000199","42215",150,"2026-09-30"]];
+  const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),kind==="clients"?"Clientes":"Titulos");
+  download(kind==="clients"?"clientes-modelo.xlsx":"titulos-modelo.xlsx",XLSX.write(book,{bookType:"xlsx",type:"array"}),"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 async function importText(input) {
   const file=$(input).files[0]; if(!file) throw new Error("Selecione um arquivo.");
   if(file.size>10*1024*1024) throw new Error("O arquivo deve ter até 10 MB.");
+  if(/\.(xlsx|xls)$/i.test(file.name)) {
+    const result=await prepareExcel(input),name=$(input==="clientsFile"?"clientsSheet":"recordsSheet").value;
+    if(!name)throw new Error("Escolha a planilha do arquivo antes de importar.");
+    return SendLExcel.csv(await loadExcel(),result.book,name);
+  }
   const bytes=await file.arrayBuffer();
   try { return new TextDecoder("utf-8",{fatal:true}).decode(bytes); }
   catch { return new TextDecoder("windows-1252").decode(bytes); }
@@ -236,7 +280,7 @@ async function resolveOperation(doc) {
   render();toast(delivered?"Envio confirmado manualmente.":"Nova tentativa liberada após sua conferência.");
 }
 async function searchGmail(next=false) {
-  if(!next) {gmailQuery=$("gmailQuery").value;gmailPage=null;$("gmailResults").textContent="Buscando documentos…";}
+  if(!next) {gmailQuery=D.gmailQuery($("gmailType").value,$("gmailPeriod").value,$("gmailQuery").value);gmailPage=null;$("gmailNext").hidden=true;$("gmailResults").textContent="Buscando documentos…";}
   const params=new URLSearchParams({q:gmailQuery});if(next&&gmailPage) params.set("pageToken",gmailPage);
   try {
     const result=await api("/api/gmail/documents?"+params);
@@ -305,12 +349,14 @@ async function start() {
   action("logout","click",async()=>{await api("/api/session/logout",{});document.body.classList.add("locked");});
   action("refreshGmail","click",refreshGmail);
   action("disconnectGmail","click",async()=>{if(confirm("Desconectar o Gmail do SendL?")){await api("/api/auth/gmail/disconnect",{});await refreshGmail();}});
+  action("clientsFile","change",()=>prepareExcel("clientsFile"));
+  action("recordsFile","change",()=>prepareExcel("recordsFile"));
   action("clientsForm","submit",async()=>{
     const rows=D.parseCsv(await importText("clientsFile")), directory=new Map(state.clients.map(c=>[c.documento,c]));
     let imported=0,ignored=0;
     for(const row of rows) {
-      const documento=D.documentId(row.documento||row.cnpj||row.cpf), cliente=D.clean(row.cliente||row.nome||row.razao_social);
-      const email=D.clean(row.email||row.email_financeiro).toLowerCase();
+      const documento=D.documentId(row.documento||row.cnpj||row.cpf||row.cpf_cnpj||row.cnpj_cpf), cliente=D.clean(row.cliente||row.nome||row.razao_social);
+      const email=D.clean(row.email||row.e_mail||row.email_financeiro||row.e_mail_financeiro).toLowerCase();
       if(!cliente||![11,14].includes(documento.length)||email&&!D.validEmail(email)) {ignored++;continue;}
       assertEditable(documento);
       const existing=directory.get(documento);
@@ -389,8 +435,8 @@ async function start() {
   action("gmailSearchForm","submit",()=>searchGmail(false));
   action("gmailNext","click",()=>searchGmail(true));
   action("exportBackup","click",exportBackup);action("restoreForm","submit",restoreBackup);
-  $("clientTemplate").addEventListener("click",()=>download("clientes-modelo.csv","\uFEFFcliente;documento;email;estado\nCLIENTE EXEMPLO;12345678000199;financeiro@exemplo.com;SP\n","text/csv;charset=utf-8"));
-  $("recordTemplate").addEventListener("click",()=>download("titulos-modelo.csv","\uFEFFcliente;documento;nota;valor;vencimento\nCLIENTE EXEMPLO;12345678000199;42215;150,00;30/09/2026\n","text/csv;charset=utf-8"));
+  action("clientTemplate","click",()=>excelTemplate("clients"));
+  action("recordTemplate","click",()=>excelTemplate("records"));
   $("exportClients").addEventListener("click",()=>download("sendl-clientes.csv","\uFEFFcliente;documento;email;estado\n"+state.clients.map(c=>[c.cliente,c.documento,c.email,c.estado].map(csvValue).join(";")).join("\n"),"text/csv;charset=utf-8"));
   for(const [input,table] of [["recordSearch","records"],["clientSearch","clients"],["queueSearch","queue"]]) {
     let timer;$(input).addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>{page[table]=1;render();},180);});

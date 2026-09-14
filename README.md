@@ -1,4 +1,7 @@
-# SendL 2 — central de documentos por Gmail
+# SendL 2.1 — Excel e coleta de documentos por Gmail
+
+A versão 2.1 restaura a importação direta de Excel .xlsx/.xls, permite escolher a aba e oferece modelos Excel. Na coleta Gmail, escolha notas/boletos/todos os PDFs e período. Em Configurações, consulte a conta de coleta e a URL de retorno. Veja [CONFIGURAR_GOOGLE.md](CONFIGURAR_GOOGLE.md) para configurar o acesso real.
+
 
 Refatoração da versão que estava na branch master (commit 585f2cf).
 O repositório original era o MVP de julho com Outlook, CSV/CNAB local e login demonstrativo. Não continha a versão mais recente mencionada no projeto nem código Firebase. Esta entrega reconstrói o fluxo a partir dessa base; o arquivo RAR não foi extraído nesta sessão.
@@ -7,8 +10,8 @@ O repositório original era o MVP de julho com Outlook, CSV/CNAB local e login d
 
 - Login validado no servidor, sem senha pública no HTML.
 - Gmail OAuth com conta permitida, PKCE, estado vinculado à sessão e renovação do token.
-- Importação e edição de clientes por CPF/CNPJ; CSV exportado pelo Excel.
-- Importação de títulos via CSV ou variante Santander CNAB 400 compatível com o parser legado.
+- Importação e edição de clientes por CPF/CNPJ; Excel .xlsx/.xls ou CSV, sem necessidade de conversão.
+- Importação de títulos via Excel .xlsx/.xls, CSV ou variante Santander CNAB 400 compatível com o parser legado.
 - Agrupamento por cliente com consulta por Map/Set e bloqueio de duplicidades na importação.
 - Vários PDFs por cliente, nota ou boleto, enviados juntos ou separadamente.
 - Busca paginada de PDFs no Gmail e vinculação explícita ao cliente selecionado.
@@ -96,10 +99,12 @@ Os clientes e PDFs não são sincronizados entre computadores. Esta versão mant
 Clientes CSV: cliente;documento;email;estado
 Títulos CSV: cliente;documento;nota;valor;vencimento
 
-Use os modelos disponíveis no painel. Datas aceitas: DD/MM/AAAA ou AAAA-MM-DD.
+Use os modelos Excel disponíveis no painel. Cabeçalhos na primeira linha da tabela. Em arquivos com várias abas visíveis, selecione a aba antes de importar. O leitor preserva CPF/CNPJ formatados, converte datas Excel para ISO e usa o valor numérico da coluna valor. Limites: arquivo de 10 MB, 50 mil linhas de dados e 101 colunas. Arquivos protegidos por senha não são suportados. Datas aceitas: DD/MM/AAAA ou AAAA-MM-DD.
 Colunas opcionais em branco não apagam os contatos já preenchidos. E-mails inválidos e documentos com tamanho incorreto são ignorados na importação, com contagem ao final. A validação de CPF/CNPJ é estrutural; não consulta a Receita nem verifica titularidade.
 
 O parser CNAB preserva a variante antiga que reconhece títulos no padrão 501XXXXXXX-XX, com registros de 400 caracteres e campos de pagador nas posições do código anterior. Outros bancos/layouts e CNAB 240 são recusados; não se deve adaptar posições sem um arquivo representativo. Sem o RAR/amostra real, não foi possível homologar o CNAB da operação. O CSV permite importar os títulos sem depender dessa variante.
+
+O leitor Excel SheetJS 0.20.3 é instalado via tarball oficial (https://docs.sheetjs.com/docs/getting-started/installation/nodejs/) e servido pelo próprio SendL. Ele só é carregado no navegador quando você usa Excel. CSV continua funcionando.
 
 A leitura do número de nota usa nome do arquivo/chave, não OCR nem interpretação do conteúdo do PDF. Números de BOL_ podem ser identificadores de boleto e precisam de conferência. A vinculação ao cliente nunca é feita apenas por um número parecido. Se houver dúvida, edite o número e abra o PDF.
 

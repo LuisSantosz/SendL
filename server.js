@@ -8,7 +8,7 @@ const { promisify } = require("node:util");
 const scrypt = promisify(crypto.scrypt);
 const { validateMessage, mime, MAX_BYTES } = require("./lib/mail");
 const storage = require("./lib/storage");
-const { validEmail } = require("./public/domain");
+const { validEmail, gmailQuery } = require("./public/domain");
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const ORIGIN = new URL(process.env.APP_ORIGIN || "http://localhost:" + PORT).origin;
@@ -88,7 +88,7 @@ async function gmail(endpoint, options={}) {
       headers: { Authorization: "Bearer "+token } })).data;
   } catch(error) { throw googleError(error); }
 }
-app.get("/health", (req,res) => res.json({ status:"ok", app:"SendL", version:"2.0.0" }));
+app.get("/health", (req,res) => res.json({ status:"ok", app:"SendL", version:"2.1.0" }));
 app.get("/api/session", (req,res) => res.json({ authenticated: !!session(req), configured: credentialsReady() }));
 app.post("/api/session/login", route(async (req,res) => {
   if (!credentialsReady()) throw fail(503,"Configure ADMIN_EMAIL e ADMIN_PASSWORD no servidor; use uma senha com pelo menos 12 caracteres.");
@@ -116,6 +116,11 @@ app.use("/api", (req,res,next) => {
 });
 app.post("/api/session/logout", (req,res) => {
   sessions.delete(cookie(req,"sendl_session")); res.clearCookie("sendl_session",{ path:"/", secure, sameSite:"lax" }); res.json({ok:true});
+});
+app.get("/api/auth/gmail/config",(req,res)=>{
+  const expectedRedirectUri=ORIGIN+"/api/auth/gmail/callback";
+  res.json({email:process.env.GMAIL_EMAIL||"",missing:googleMissing(),expectedRedirectUri,
+    redirectUri:process.env.GOOGLE_REDIRECT_URI||"",redirectMatches:process.env.GOOGLE_REDIRECT_URI===expectedRedirectUri});
 });
 app.get("/api/auth/gmail/login", (req,res,next) => {
   if (sending || connecting) return next(fail(409,"Aguarde a operação atual antes de conectar."));
@@ -229,7 +234,7 @@ function pdfParts(part, result=[]) {
 }
 const googleId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,512}$/.test(value);
 app.get("/api/gmail/documents", route(async (req,res) => {
-  const q=String(req.query.q || "has:attachment filename:pdf newer_than:30d -in:sent -in:trash");
+  const q=String(req.query.q || gmailQuery());
   if (q.length>500) throw fail(400,"Busca muito longa.");
   const pageToken=String(req.query.pageToken || "");
   if (pageToken.length>1000) throw fail(400,"Página inválida.");
@@ -265,6 +270,10 @@ app.get("/api/gmail/documents/:id/attachment", route(async(req,res)=>{
   res.json({name:file.name,contentBytes:buffer.toString("base64")});
 }));
 app.use("/api",(req,res)=>res.status(404).json({error:"Rota não encontrada."}));
+app.get("/vendor/xlsx.full.min.js",(req,res,next)=>{
+  try {res.sendFile(require.resolve("xlsx/dist/xlsx.full.min.js"));}
+  catch(error){next(fail(503,"Instale as dependências do leitor Excel com npm install."));}
+});
 app.use(express.static(path.join(__dirname,"public"),{dotfiles:"deny",index:"index.html",maxAge:0}));
 app.use((req,res)=>res.status(404).type("text").send("Página não encontrada."));
 app.use((error,req,res,next)=>{

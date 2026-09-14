@@ -59,9 +59,9 @@
     if (/[;,]/.test(lines[0]) && /documento|cnpj|cpf/i.test(lines[0])) {
       rows = parseCsv(content).map(row => ({
         cliente: clean(row.cliente || row.nome),
-        documento: documentId(row.documento || row.cnpj || row.cpf),
+        documento: documentId(row.documento || row.cnpj || row.cpf || row.cpf_cnpj || row.cnpj_cpf),
         nota: clean(row.nota || row.nfe || row.titulo),
-        valor: amount(row.valor), vencimento: isoDate(row.vencimento)
+        valor: amount(row.valor || row.valor_titulo || row.valor_parcela), vencimento: isoDate(row.vencimento)
       }));
     } else {
       // Keep the legacy Santander variant; do not silently guess other bank layouts.
@@ -110,5 +110,16 @@
     return [...map.values()].map(g => ({ ...g, ready: validEmail(g.email) && g.files.length > 0,
       total: g.records.reduce((sum,r) => sum + Number(r.valor || 0), 0) }));
   }
-  return { clean, documentId, validEmail, escapeHtml, parseCsv, isoDate, amount, recordKey, importRecords, mergeRecords, invoiceNumber, groups };
+  function gmailQuery(type="both",period="30",extra="") {
+    const kinds={
+      nota:'{subject:"Nota Fiscal Eletronica" subject:"Nota Fiscal Eletrônica" subject:NFe filename:NFE filename:NOTA}',
+      boleto:'{subject:boleto filename:BOL filename:BOLETO}',
+      both:'{subject:"Nota Fiscal Eletronica" subject:"Nota Fiscal Eletrônica" subject:NFe subject:boleto filename:NFE filename:NOTA filename:BOL filename:BOLETO}',
+      all:""
+    };
+    if(!Object.hasOwn(kinds,type)||!["7","30","90","all"].includes(String(period)))throw new Error("Filtro de coleta inválido.");
+    if(clean(extra).length>250)throw new Error("A busca adicional deve ter até 250 caracteres.");
+    return ["has:attachment filename:pdf -in:sent -in:trash",period==="all"?"":"newer_than:"+period+"d",kinds[type],clean(extra)].filter(Boolean).join(" ");
+  }
+  return { gmailQuery, clean, documentId, validEmail, escapeHtml, parseCsv, isoDate, amount, recordKey, importRecords, mergeRecords, invoiceNumber, groups };
 });
