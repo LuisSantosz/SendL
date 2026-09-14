@@ -145,4 +145,7 @@ Antes de substituir a instalação em uso, valide com um destinatário de teste:
 6. Gmail conectado, recebimento dos anexos e falhas de autorização.
 7. Layout em celular e notebook.
 
-A CI não substitui a validação visual no navegador nem a homologação com arquivos CNAB reais.
+A CI também executa um fluxo no Chromium com Playwright: login, importações, PDFs após recarregar, backup/restauração, fila, envio simulado e ausência de overflow em telas de 1440, 390 e 320 pixels. Não substitui revisão visual humana nem homologação com arquivos CNAB reais.
+
+Para executar esse teste opcional localmente: npm install --no-save playwright@1.55.1, npx playwright install chromium e node tests/browser.cjs. O Playwright é instalado apenas para testes; não é dependência do servidor em produção. Referência: https://playwright.dev/docs/ci
+
