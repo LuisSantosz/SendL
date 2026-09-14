@@ -154,3 +154,10 @@ A CI também executa um fluxo no Chromium com Playwright: login, importações, 
 
 Para executar esse teste opcional localmente: npm install --no-save playwright@1.55.1, npx playwright install chromium e node tests/browser.cjs. O Playwright é instalado apenas para testes; não é dependência do servidor em produção. Referência: https://playwright.dev/docs/ci
 
+
+
+### Associação automática com a remessa
+
+Importe o CNAB (ou títulos em Excel), depois clique em Buscar documentos no Gmail. Cada página de mensagens é analisada e vinculada automaticamente; Mais mensagens processa a próxima página. Não é preciso selecionar cliente ou tipo. O sistema cruza títulos completos ou números de NF com a remessa e procura CPF/CNPJ nas seções de pagador/sacado/destinatário do PDF. Não usa nome parecido, remetente ou CNPJ do emitente para escolher o cliente. Não converte o prefixo de títulos bancários em número de NF.
+
+PDFs ambíguos, ilegíveis, digitalizados sem texto ou acima de 20 páginas ficam pendentes com motivo e opção manual. Clientes presentes na remessa são cadastrados sem e-mail quando necessário; complete o e-mail antes de enviar. Buscar novamente ignora anexos já coletados, inclusive enviados. A associação não dispara envio. A leitura do PDF ocorre no servidor, com limite de tempo e memória. Instale as novas dependências com `npm install` e use Node 22.16 ou superior.

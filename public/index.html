@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="domain.js" defer></script>
   <script src="excel.js" defer></script>
+  <script src="matching.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body class="locked">
@@ -72,7 +73,7 @@
         <article class="panel"><p class="eyebrow">02 · VINCULE</p><h2>Anexar PDFs</h2><p>Selecione o cliente que deve receber os documentos. Você pode anexar vários arquivos de uma vez.</p>
           <form id="filesForm"><label>Cliente<select id="fileClient" required></select></label><label>Tipo<select id="fileKind"><option value="boleto">Boleto</option><option value="nota">Nota fiscal</option></select></label><label>Arquivos PDF<input id="pdfFiles" type="file" accept=".pdf,application/pdf" multiple required></label><button class="btn primary">Vincular documentos</button></form>
         </article>
-        <article class="panel"><h2>Buscar PDFs no Gmail</h2><p>Localize os anexos recebidos e escolha para qual cliente vinculá-los.</p><form id="gmailSearchForm"><label>Documentos<select id="gmailType"><option value="both">Notas e boletos</option><option value="nota">Notas fiscais</option><option value="boleto">Boletos</option><option value="all">Todos os PDFs</option></select></label><label>Período<select id="gmailPeriod"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="all">Todo o período</option></select></label><label>Busca adicional (opcional)<input id="gmailQuery" placeholder="Ex.: from:notafiscaledelwhite ou número da nota"></label><button class="btn subtle">Buscar documentos</button></form><div id="gmailResults"></div><button id="gmailNext" class="btn subtle" hidden>Mais mensagens</button></article>
+        <article class="panel"><h2>Buscar PDFs no Gmail</h2><p>Os PDFs são associados automaticamente à remessa. Pendências podem ser vinculadas manualmente usando o cliente e tipo selecionados ao lado.</p><form id="gmailSearchForm"><label>Documentos<select id="gmailType"><option value="both">Notas e boletos</option><option value="nota">Notas fiscais</option><option value="boleto">Boletos</option><option value="all">Todos os PDFs</option></select></label><label>Período<select id="gmailPeriod"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="all">Todo o período</option></select></label><label>Busca adicional (opcional)<input id="gmailQuery" placeholder="Ex.: from:notafiscaledelwhite ou número da nota"></label><button class="btn subtle">Buscar documentos</button></form><div id="gmailResults"></div><button id="gmailNext" class="btn subtle" hidden>Mais mensagens</button></article>
       </div>
       <article class="panel"><div class="panel-head"><div><h2>Documentos vinculados</h2><p>Confira o cliente e ajuste o número da nota quando necessário.</p></div></div><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Arquivo</th><th>Tipo</th><th>Nota</th><th>Status</th><th>Ações</th></tr></thead><tbody id="filesTable"></tbody></table></div><div id="filesPager" class="pager"></div></article>
     </section>

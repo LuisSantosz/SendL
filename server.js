@@ -268,7 +268,8 @@ app.get("/api/gmail/documents/:id/attachment", route(async(req,res)=>{
   }
   const buffer=Buffer.from(body?.data||"","base64url");
   if(buffer.length>MAX_BYTES || buffer.subarray(0,5).toString("ascii")!=="%PDF-") throw fail(400,"Anexo inválido ou muito grande.");
-  res.json({name:file.name,contentBytes:buffer.toString("base64")});
+  const analysis=req.query.analyze==="1"?await require("./lib/pdf").analyzePdf(buffer):{};
+  res.json({name:file.name,contentBytes:buffer.toString("base64"),...analysis});
 }));
 app.use("/api",(req,res)=>res.status(404).json({error:"Rota não encontrada."}));
 app.get("/vendor/xlsx.full.min.js",(req,res,next)=>{

@@ -219,7 +219,7 @@ async function fileHash(blob) {
   const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());
   return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
-async function attach(blobs,doc,kind,sourcePrefix="local") {
+async function attach(blobs,doc,kind,sourcePrefix="local",quiet=false) {
   assertEditable(doc);
   if(!state.clients.some(c=>c.documento===doc)) throw new Error("Selecione um cliente cadastrado.");
   const additions=[]; let duplicates=0;
@@ -235,7 +235,8 @@ async function attach(blobs,doc,kind,sourcePrefix="local") {
   }
   await transaction("readwrite",s=>additions.forEach(f=>s.put(f)));
   await reloadFiles(); log("Documentos vinculados",additions.length+" PDF(s); "+duplicates+" duplicado(s) ignorado(s).");
-  render();toast(additions.length+" PDF(s) vinculado(s). "+duplicates+" duplicado(s) ignorado(s).");
+  render();if(!quiet)toast(additions.length+" PDF(s) vinculado(s). "+duplicates+" duplicado(s) ignorado(s).");
+  return additions.length;
 }
 function preview(id) {
   const f=files.find(item=>item.id===id); if(!f) return;
@@ -280,14 +281,46 @@ async function resolveOperation(doc) {
   render();toast(delivered?"Envio confirmado manualmente.":"Nova tentativa liberada após sua conferência.");
 }
 async function searchGmail(next=false) {
-  if(!next) {gmailQuery=D.gmailQuery($("gmailType").value,$("gmailPeriod").value,$("gmailQuery").value);gmailPage=null;$("gmailNext").hidden=true;$("gmailResults").textContent="Buscando documentos…";}
-  const params=new URLSearchParams({q:gmailQuery});if(next&&gmailPage) params.set("pageToken",gmailPage);
-  try {
-    const result=await api("/api/gmail/documents?"+params);
-    const html=result.messages.map(m=>'<div class="mail-result"><strong>'+esc(m.subject)+'</strong><small>'+esc(m.from)+' · '+esc(m.date)+'</small>'+m.files.map(f=>'<button class="btn subtle" data-gmail-message="'+esc(m.id)+'" data-gmail-part="'+esc(f.partId)+'">Vincular '+esc(f.name)+'</button>').join("")+'</div>').join("")||'<p>Nenhum PDF encontrado nesta página.</p>';
-    $("gmailResults").innerHTML=html;
-    gmailPage=result.nextPageToken;$("gmailNext").hidden=!gmailPage;
-  } catch(error) { $("gmailResults").textContent=error.message;throw error; }
+ if(!next){gmailQuery=D.gmailQuery($("gmailType").value,$("gmailPeriod").value,$("gmailQuery").value);gmailPage=null;}
+ $("gmailNext").hidden=true;
+ $("gmailResults").textContent="Buscando e associando documentos à remessa…";
+ const params=new URLSearchParams({q:gmailQuery});if(next&&gmailPage)params.set("pageToken",gmailPage);
+ let linked=0,skipped=0,pending=0;const output=[];
+ try{
+  const result=await api("/api/gmail/documents?"+params);
+  for(const m of result.messages){
+   const items=[];
+   for(const f of m.files){
+    const source="gmail:"+m.id+":"+f.partId;let reason="";
+    try{
+     if(files.some(file=>file.source===source)){skipped++;items.push("<p>"+esc(f.name)+" — já coletado.</p>");continue;}
+     const result=await api("/api/gmail/documents/"+encodeURIComponent(m.id)+"/attachment?"+new URLSearchParams({partId:f.partId,analyze:"1"}));
+     const match=window.SendLMatching.matchDocument(result,state.records);
+     if(match.documento){
+      assertEditable(match.documento);
+      if(!state.clients.some(c=>c.documento===match.documento)){
+       const record=state.records.find(r=>r.documento===match.documento);
+       update(s=>s.clients.push({id:uid(),documento:match.documento,cliente:record.cliente||match.documento,email:"",estado:""}));
+      }
+      const blob=blobFromBase64(result.contentBytes),hash=await fileHash(blob);
+      if(files.some(file=>file.hash===hash)){skipped++;items.push("<p>"+esc(f.name)+" — PDF já coletado.</p>");continue;}
+      const count=await attach([{name:result.name,blob}],match.documento,match.kind,source,true);
+      linked+=count;
+      items.push("<p>"+esc(f.name)+" — vinculado automaticamente a "+esc(state.clients.find(c=>c.documento===match.documento).cliente)+" ("+esc(match.reason)+").</p>");
+      continue;
+     }
+     reason=match.reason;
+    }catch(error){reason=error.message;}
+    pending++;
+    items.push("<p>"+esc(f.name)+" — Pendente: "+esc(reason)+"</p>"+'<button class="btn subtle" data-gmail-message="'+esc(m.id)+'" data-gmail-part="'+esc(f.partId)+'">Vincular manualmente '+esc(f.name)+'</button>');
+   }
+   output.push('<div class="mail-result"><strong>'+esc(m.subject)+'</strong><small>'+esc(m.from)+' · '+esc(m.date)+'</small>'+items.join("")+'</div>');
+   $("gmailResults").innerHTML="<p>"+linked+" vinculado(s), "+skipped+" já coletado(s), "+pending+" pendente(s).</p>"+output.join("");
+  }
+  if(!result.messages.length)$("gmailResults").textContent="Nenhum PDF encontrado nesta página.";
+  gmailPage=result.nextPageToken;$("gmailNext").hidden=!gmailPage;
+  toast(linked+" PDF(s) vinculado(s) automaticamente; "+pending+" pendente(s).");
+ }catch(error){$("gmailResults").textContent=error.message;throw error;}
 }
 async function exportBackup() {
   const entries=[];
