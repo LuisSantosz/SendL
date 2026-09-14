@@ -296,9 +296,10 @@ async function start() {
   function clock() {$("clock").textContent=new Date().toLocaleString("pt-BR",{dateStyle:"full",timeStyle:"short"});}
   clock();setInterval(clock,30000);
   action("loginForm","submit",async e=>{
-    const body=Object.fromEntries(new FormData(e.currentTarget));
+    const form=e.currentTarget;
+    const body=Object.fromEntries(new FormData(form));
     $("loginFeedback").textContent="Entrando…";
-    try {await api("/api/session/login",body);document.body.classList.remove("locked");e.currentTarget.reset();$("loginFeedback").textContent="";await refreshGmail();}
+    try {await api("/api/session/login",body);document.body.classList.remove("locked");form.reset();$("loginFeedback").textContent="";await refreshGmail();}
     catch(error) {$("loginFeedback").textContent=error.message;throw error;}
   });
   action("logout","click",async()=>{await api("/api/session/logout",{});document.body.classList.add("locked");});
@@ -372,6 +373,7 @@ async function start() {
     }
   });
   action("testForm","submit",async e=>{
+    const destination=new FormData(e.currentTarget).get("to");
     if(testOperation) {
       const result=await api("/api/email/operations/"+testOperation);
       if(result.status==="sent") {testOperation=null;$("testFeedback").textContent="O teste anterior foi enviado.";return;}
@@ -381,7 +383,7 @@ async function start() {
       }
     }
     testOperation=uid();
-    const result=await api("/api/email/send",{operationId:testOperation,to:new FormData(e.currentTarget).get("to"),subject:"Teste SendL - Gmail conectado",text:"Este é um e-mail de teste da central SendL / Edel White.",attachments:[]});
+    const result=await api("/api/email/send",{operationId:testOperation,to:destination,subject:"Teste SendL - Gmail conectado",text:"Este é um e-mail de teste da central SendL / Edel White.",attachments:[]});
     if(result.ok){testOperation=null;$("testFeedback").textContent="E-mail de teste enviado.";log("Teste enviado");}
   });
   action("gmailSearchForm","submit",()=>searchGmail(false));
