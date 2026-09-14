@@ -139,7 +139,7 @@ const XLSX=require("xlsx");
     let secondPage=0;
     await page.route("**/api/gmail/documents?*",route=>{
       const params=new URL(route.request().url()).searchParams,q=params.get("q");
-      assert.ok(q.includes('"5010018735-01"')||q.includes('"00093960697015"')||q.includes('"939.606.970-15"'));
+      assert.ok(q.includes('"5010018735-01"')||q.includes('"00093960697015"')||q.includes('"939.606.970-15"')||q.includes('"18735"')||q.includes('"000018735"'));
       const next=params.get("pageToken");if(next)secondPage++;
       return route.fulfill({json:{messages:[{id:next?"cnab-note":"cnab-bol",subject:"Boleto(s) Bancário Referente à NFe 000018735",files:[{name:next?"NFe_18735.pdf":"BOL_000018735.pdf",partId:"1"}]}],nextPageToken:next?null:"second"}});
     });

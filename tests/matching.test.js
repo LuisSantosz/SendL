@@ -53,3 +53,15 @@ test("cadastro e fila compartilham CPF/CNPJ sem modificar documentos armazenados
  const conflict=D.groups(records,[...clients,{documento:"00093960697015",email:"other@example.com"}],files)[0];
  assert.equal(conflict.ready,false);assert.equal(conflict.emailConflict,true);
 });
+
+test("layout Santander 501 associa NF e parcela do boleto sem CPF no boleto",()=>{
+ const remessa=[1,2,3,4].map(i=>({documento:"00012345678901",nota:"5010043106-0"+i,valor:239.4,vencimento:"2026-10-11"}));
+ assert.equal(match({name:"NFe_43106.pdf",text:"DANFE\nDestinatario\n123.456.789.01"},remessa).documento,remessa[0].documento);
+ const boleto={name:"documento.pdf",text:"PAGAVEL PREFERENCIALMENTE NAS AGENCIAS DO SANTANDER\nBeneficiario EMPRESA CNPJ 12.345.678/0001-99\nPagador\nNumero do Documento\nNosso Numero\nCLIENTE TESTE\n000043106 / 00001\n01019058\nValor 239,40"};
+ assert.equal(match(boleto,remessa).documento,remessa[0].documento);
+ assert.equal(match(boleto,remessa).nota,"43106");
+ assert.equal(match({...boleto,text:boleto.text.replace("/ 00001","/ 00009")},remessa).documento,undefined);
+ const queries=require("../public/matching").remessaQueries(remessa,"has:attachment filename:pdf");
+ assert.ok(queries.join(" ").includes('"000043106"'));
+ assert.ok(queries.join(" ").includes('"43106"'));
+});

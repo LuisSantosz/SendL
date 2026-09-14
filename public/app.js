@@ -232,7 +232,7 @@ async function attach(blobs,doc,kind,sourcePrefix="local",quiet=false) {
     const hash=await fileHash(blob);
     if(hashes.has(hash)) {duplicates++;continue;}
     hashes.add(hash);
-    additions.push({id:uid(),documento:doc,kind,nota:D.invoiceNumber(name),name,blob,hash,source:sourcePrefix,createdAt:new Date().toISOString()});
+    additions.push({id:uid(),documento:doc,kind,nota:item.nota||D.invoiceNumber(name),name,blob,hash,source:sourcePrefix,createdAt:new Date().toISOString()});
   }
   await transaction("readwrite",s=>additions.forEach(f=>s.put(f)));
   await reloadFiles(); log("Documentos vinculados",additions.length+" PDF(s); "+duplicates+" duplicado(s) ignorado(s).");
@@ -320,7 +320,7 @@ async function searchGmail() {
         }
         const blob=blobFromBase64(result.contentBytes),hash=await fileHash(blob);
         if(files.some(f=>f.hash===hash)){skipped++;progress();continue;}
-        linked+=await attach([{name:result.name,blob}],match.documento,match.kind,source,true);
+        linked+=await attach([{name:result.name,blob,nota:match.nota}],match.documento,match.kind,source,true);
         output.push("<p>"+esc(file.name)+" — vinculado automaticamente a "+esc(D.clientFor(state.clients,match.documento).cliente)+".</p>");
        }else reason=match.reason;
       }catch(error){reason=error.message;}
